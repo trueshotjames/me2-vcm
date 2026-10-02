@@ -1,0 +1,8 @@
+Epoch	Train Loss	Val F1-Score	Val Accuracy	Val FAR
+1	338.7820	0.0000	0.0000	0.9138
+--- New Best Model Saved at Epoch 1 with F1: 0.0000 ---
+1	11.6740	0.0000	0.0033	0.9138
+--- New Best Model Saved at Epoch 1 with F1: 0.0000 ---
+2	11.2365	0.0001	0.0005	0.9138
+--- New Best Model Saved at Epoch 2 with F1: 0.0001 ---
+3	10.9825	0.0001	0.0006	0.9138
