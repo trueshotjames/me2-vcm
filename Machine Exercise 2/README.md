@@ -1,6 +1,6 @@
 # Voice Command Model (VCM) — Machine Exercise 2
 
-A lightweight, on-device speech recognition system designed to run on a **Raspberry Pi 4 (4GB RAM)** without cloud dependencies. The system uses a two-stage pipeline: a continuously-listening **wake-word detector** and an on-demand **voice-command model** that transcribes speech into 57 fixed tokens.
+A lightweight, on-device speech recognition system designed to run on a **Raspberry Pi 4 (4GB RAM)** without cloud dependencies. The system uses a two-stage pipeline: a continuously-listening **wake-word detector** and an on-demand **voice-command model** that transcribes speech into 116 fixed tokens.
 
 > **Training reference:** When training on the DGX GPU cluster, open this project directly in GitHub Codespaces:
 > 🔗 [https://vscode.dev/github/sibyl-oracles/onit/blob/mainbox/Machine%20Exercise%202](https://vscode.dev/github/sibyl-oracles/onit/blob/mainbox/Machine%20Exercise%202)
