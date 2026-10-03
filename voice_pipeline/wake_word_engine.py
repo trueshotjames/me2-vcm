@@ -11,6 +11,15 @@ import onnxruntime as ort
 import vlc     
 import requests  
 from collections import deque
+try:
+    import benchmark_adapter
+except ImportError:
+    benchmark_adapter = None
+
+def _benchmark_mode():
+    if benchmark_adapter is None:
+        return False
+    return benchmark_adapter.is_benchmark_mode()
 
 # Point the system path to the /models folder to access the attached model
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'models')))
@@ -187,7 +196,11 @@ class WakeWordEngine:
                     vcm_input = padded_audio.reshape(1, 1, -1)
 
                     # Run ONNX inference
+                    if _benchmark_mode():
+                        _t0 = time.perf_counter()
                     vcm_output = vcm_session.run(["output"], {"input": vcm_input})[0]
+                    if _benchmark_mode():
+                        _infer_ms = (time.perf_counter() - _t0) * 1000.0
 
                     # Decode the CTC Output (Extract max probability and ignore blank tokens [index 0])
                     preds = np.argmax(vcm_output, axis=1)[0]
@@ -199,7 +212,10 @@ class WakeWordEngine:
                         prev_token = p
 
                     transcribed_command = " ".join(decoded_tokens)
-                    
+
+                    if _benchmark_mode():
+                        benchmark_adapter.log_benchmark_result(transcribed_command, _infer_ms)
+
                     # 5. Display the final output in the terminal
                     print(f"[VCM Output]: {transcribed_command}")
 

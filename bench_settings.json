@@ -1,0 +1,9 @@
+{
+  "music_play": "PLAY_MUSIC",
+  "music_pause": "PAUSE",
+  "music_stop": "STOP",
+  "music_skip": "NEXT",
+  "music_vol_up": "VOLUME_UP",
+  "music_vol_down": "VOLUME_DOWN",
+  "call_mom": "CALL"
+}
