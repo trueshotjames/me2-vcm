@@ -1,0 +1,10 @@
+flask
+openpyxl
+requests
+python-vlc
+numpy
+scipy
+sounddevice
+soundfile
+onnxruntime
+psutil

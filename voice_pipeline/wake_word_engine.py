@@ -366,7 +366,8 @@ class WakeWordEngine:
                     reason = "mic stopped"
                     break
                 decoder.add_audio(decimator.process(chunk))
-                if decoder.audio_ms >= next_tick:
+                # A full buffer stops growing at MAX_COMMAND_SEC, so it must tick even if next_tick is past it
+                if decoder.audio_ms >= next_tick or decoder.audio_ms >= MAX_COMMAND_SEC * 1000:
                     next_tick = decoder.audio_ms + DECODE_TICK_MS
                     reason = decoder.tick()
         finally:

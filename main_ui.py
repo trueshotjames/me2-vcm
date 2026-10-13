@@ -8,7 +8,6 @@ import threading
 import time
 import openpyxl
 import sys
-import os
 # Allow main_ui.py to see inside the voice_pipeline folder
 sys.path.append(os.path.join(os.path.dirname(__file__), 'voice_pipeline'))
 from intent_parser import parse_text, command_guide
@@ -22,9 +21,7 @@ import pi_metrics
 app = Flask(__name__)
 
 # --- Music Player Setup ---
-PLAYLIST_DIR = r"C:\Users\King\Documents\1. UP Files\AI 231 - MLOps\Machine Exercises\me2-repo\Machine Exercise 2\playlist"
-if not os.path.exists(PLAYLIST_DIR):
-    PLAYLIST_DIR = os.path.join(os.path.dirname(__file__), 'playlist')
+PLAYLIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'playlist')
 
 playlist = sorted(glob.glob(os.path.join(PLAYLIST_DIR, "*.mp3")))
 current_track_idx = 0
@@ -171,10 +168,7 @@ def handle_text_parsing():
 
 @app.route('/ringtone')
 def get_ringtone():
-    ringtone = r"C:\Users\King\Documents\1. UP Files\AI 231 - MLOps\Machine Exercises\me2-repo\Machine Exercise 2\sounds\call_ringtone.mp3"
-    if not os.path.exists(ringtone):
-        ringtone = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sounds', 'call_ringtone.mp3')
-    return send_file(ringtone)
+    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sounds', 'call_ringtone.mp3'))
 
 @app.route('/commands', methods=['GET'])
 def get_commands():
@@ -398,4 +392,7 @@ def events():
     return Response(stream(), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 if __name__ == '__main__':
+    # A trigger file left over from an earlier run would make the engine record at once
+    if os.path.exists('manual_trigger.txt'):
+        os.remove('manual_trigger.txt')
     app.run(host='127.0.0.1', port=5000, threaded=True)

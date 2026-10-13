@@ -107,8 +107,13 @@ me2-vcm/
 ├── index.html                     The dashboard: house view, chat, widgets, command box and buttons
 ├── pi_metrics.py                  Reads Pi temperature, CPU, memory, clock and throttling for the
 │                                  Pi health card (/proc, /sys, vcgencmd; psutil on other systems)
-├── run.bat                        Windows launcher: starts the server and the wake word engine,
-│                                  opens the browser
+├── run.sh                         Pi / Linux launcher: creates .venv on first run, starts the server
+│                                  and the wake word engine, opens the browser, stops both on Ctrl+C
+├── run.bat                        Windows launcher: same steps as run.sh; the engine runs in its
+│                                  own window, which closes when the server stops
+├── .gitattributes                 Keeps CRLF line endings for .bat files and LF for .sh files
+├── requirements.txt               Python packages for .venv
+├── CHANGE.md                      Log of fixes and the steps they need from you
 ├── voice_pipeline/
 │   ├── wake_word_engine.py        Always-on microphone loop: wake word detection, beep, streaming
 │   │                              VCM decoding, end-of-command detection, posts results to Flask
@@ -180,8 +185,10 @@ git clone https://github.com/trueshotjames/me2-vcm.git
 cd me2-vcm
 python3 -m venv .venv
 source .venv/bin/activate
-pip install flask openpyxl requests python-vlc numpy scipy sounddevice soundfile onnxruntime
+pip install -r requirements.txt
 ```
+
+Install the Python packages with pip inside `.venv`, not with apt. Debian's `python3-onnxruntime` package crashes with **"Illegal instruction"** on the Raspberry Pi 4 (the wake word engine dies on start). The PyPI build of `onnxruntime` works. `run.sh` creates `.venv` and installs `requirements.txt` by itself if `.venv` is missing.
 
 `playlist/` comes with three demo songs. Add or replace `.mp3` files there to change what the music commands play.
 
@@ -196,15 +203,22 @@ If you hear your recording, the engine will hear you too. Set the default input 
 
 ### 5. Start everything
 
-Run both programs from the repository folder (they share `manual_trigger.txt` and the Excel files through the current folder).
-
 ```bash
-python main_ui.py &
-python voice_pipeline/wake_word_engine.py &
-chromium-browser --kiosk --noerrdialogs --disable-extensions "http://127.0.0.1:5000/?lite=1"
+./run.sh
 ```
 
-`?lite=1` turns off the page's fade animations, which saves CPU on the Pi. Press `Alt+F4` to leave kiosk mode. On Windows, `run.bat` does the first two steps and opens the browser.
+`run.sh` starts the server, waits until it answers, starts the wake word engine and opens `http://127.0.0.1:5000/?lite=1` in the default browser. `?lite=1` turns off the page's fade animations, which saves CPU on the Pi. Press `Ctrl+C` in the terminal to stop the server and the engine together.
+
+To start the parts by hand instead, run them from the repository folder (they share `manual_trigger.txt` and the Excel files through the current folder):
+
+```bash
+source .venv/bin/activate
+python main_ui.py &
+python voice_pipeline/wake_word_engine.py &
+chromium --kiosk --noerrdialogs --disable-extensions "http://127.0.0.1:5000/?lite=1"
+```
+
+On current Raspberry Pi OS the browser command is `chromium` (older releases call it `chromium-browser`). Press `Alt+F4` to leave kiosk mode. On Windows, double-click `run.bat`: it does the same as `run.sh` (creating `.venv` on the first run), with the wake word engine in its own window. To stop, press `Ctrl+C` in the server window and answer `N` to *Terminate batch job?*, so the engine window closes too.
 
 ### 6. Use it
 
