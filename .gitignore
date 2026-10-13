@@ -1,36 +1,13 @@
-# Scripts to ignore
-run_pipeline_wake.sh
-run_pipeline.sh
-
-# Docs folders
-docs/
-old_docs/
-
-# My voice recordings
-my_voice/
-
-# Python cache
+# Python
 __pycache__/
+.venv/
 
-# Scripts to ignore
-training_env/dataset/search_audio.py
-training_env_wake/dataset/search_audio.py
-training_env_wake/dataset/target_noise_mixing.py
-training_env/prepare_labels.py
-training_env/filter_data.py
+# Created at runtime
+alarms.xlsx
+reminders.xlsx
+manual_trigger.txt
+vcm_debug_clip_*.wav
 
-# Dataset folders - ignore content but keep folder
-training_env/dataset/classmate-dataset/*
-!training_env/dataset/classmate-dataset/.gitkeep
-training_env/dataset/common-voice-dataset/*
-!training_env/dataset/common-voice-dataset/.gitkeep
-training_env/dataset/fluent_speech_commands_dataset/*
-!training_env/dataset/fluent_speech_commands_dataset/.gitkeep
-training_env/dataset/mlend_spoken_numerals/*
-!training_env/dataset/mlend_spoken_numerals/.gitkeep
-training_env/dataset/syntts_commands_media_dataset/*
-!training_env/dataset/syntts_commands_media_dataset/.gitkeep
-training_env_wake/dataset/Alexa/*
-!training_env_wake/dataset/Alexa/.gitkeep
-training_env_wake/dataset/speech-noise-dataset/*
-!training_env_wake/dataset/speech-noise-dataset/.gitkeep
+# Your own music (keep the folder)
+playlist/*
+!playlist/.gitkeep

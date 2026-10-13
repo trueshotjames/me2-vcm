@@ -1,8 +1,0 @@
-torch
-torchaudio
-soundfile
-onnx
-onnxruntime
-Flask
-openpyxl
-pandas

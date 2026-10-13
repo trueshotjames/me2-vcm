@@ -1,376 +1,604 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Voice Command UI</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 20px;
-            /* Forces the page to be scrollable if the browser is too small */
-            overflow: auto; 
-            min-width: 1000px; /* Increased to ensure the right column has enough room before scrolling */
-            min-height: 800px;
+        :root {
+            --bg: #eef1f4;
+            --panel: #ffffff;
+            --ink: #1d2733;
+            --muted: #5d6b78;
+            --line: #d8dee5;
+            --accent: #0f766e;
+            --accent-soft: #e0f2ef;
+            --good: #2e7d32;
+            --good-soft: #e5f3e6;
+            --bad: #b3401a;
+            --bad-soft: #fbe7de;
+            --rec: #c62828;
+            --rec-soft: #fde8e8;
+            --warn: #8a6100;
+            --warn-soft: #fff3cd;
         }
-        
-        .grid-container {
-            display: grid;
-            grid-template-columns: 700px 1fr; /* Fixed 500px left column, flexible right column */
-            grid-template-rows: auto auto;  
-            gap: 20px;
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            font-size: 14px;
+            color: var(--ink);
+            background: var(--bg);
         }
+        h1, h2 { margin: 0; }
+        h1 { font-size: 18px; }
+        h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+        button { font: inherit; cursor: pointer; }
+        button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-        /* Top Left Quadrant: House Graphic */
-        .top-left { display: flex; flex-direction: column; }
-        #house { 
-            width: 700px; /* Fixed width stops the inner objects from shifting */
-            height: 400px; 
-            background: linear-gradient(to bottom, #f4ecd8 0%, #f4ecd8 75%, #a66e47 75%, #a66e47 100%); 
-            border: 2px solid black; 
-            box-sizing: border-box; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            font-size: 24px; 
-            position: relative; 
-            overflow: hidden; 
+        /* --- Top bar: pipeline status + record button --- */
+        .topbar {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+            padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+            position: sticky; top: 0; z-index: 1000;
         }
-        .switch-overlay, .thermostat-overlay, .call-overlay { 
-            display: none; 
-            position: absolute; 
-            background: white; 
-            padding: 20px; 
-            border: 2px solid black; 
-            font-weight: bold; 
-            font-size: 20px; 
-            z-index: 999; /* Forces pop-ups to the front */
+        .pipeline { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+        .step {
+            padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line);
+            color: var(--muted); background: var(--panel); font-size: 13px; transition: all .2s;
         }
-        
-        /* Top Right Quadrant: Chatbox */
-        .top-right { display: flex; flex-direction: column; }
-        #chatbox { width: 100%; height: 400px; box-sizing: border-box; resize: none; font-family: monospace; }
-        
-        /* Bottom Left Quadrant: Widgets */
-        .bottom-left { display: flex; flex-direction: column; gap: 15px; padding: 15px; border: 1px solid #ccc; background: #f9f9f9; }
-        .widget-box { padding: 10px; border: 1px solid #aaa; background: white; }
-        .widget-title { font-weight: bold; margin-bottom: 5px; }
-        
-        /* Bottom Right Quadrant: Command Buttons */
-        .bottom-right { display: flex; flex-direction: column; gap: 20px; padding: 15px; border: 1px solid #ccc; background: #f9f9f9; }
-        .button-group { display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px dashed #aaa; }
-        .group-title { font-size: 14px; font-weight: bold; color: #555; margin-bottom: 5px; }
-        .button-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .step.active { color: #fff; border-color: transparent; }
+        .step.listening.active { background: var(--accent); }
+        .step.recording.active { background: var(--rec); }
+        .step.decoding.active { background: var(--warn); }
+        .step.done.active { background: var(--good); }
+        .step.rejected.active { background: var(--bad); }
+        .step.listening.active::before { content: "● "; }
+        #recordBtn {
+            padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent);
+            background: var(--accent); color: #fff; font-weight: 600;
+        }
+        #recordBtn:disabled { background: var(--panel); color: var(--muted); border-color: var(--line); cursor: default; }
 
-        /* House Object Positioning and Default Shadows */
-        .house-object {
-            position: absolute;
-            filter: drop-shadow(0px 15px 10px rgba(0,0,0,0.5));
-            transition: filter 0.5s ease;
-            z-index: 5;
+        /* --- Layout --- */
+        .layout {
+            display: grid; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto;
+            grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+            grid-template-areas: "house side" "widgets commands";
+            align-items: start;
         }
+        input[type=range] { accent-color: var(--accent); }
+        .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+        .house-panel { grid-area: house; }
+        .side { grid-area: side; }
+        .widgets-panel { grid-area: widgets; }
+        .commands { grid-area: commands; }
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "house" "side" "widgets" "commands"; }
+        }
+        .panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { background: var(--accent-soft); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+        .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 
-        /* Top-Center Warm Light */
-        #light-overlay {
-            background: radial-gradient(circle at top center, rgba(255, 150, 0, 0.5), transparent);
-            transition: opacity 0.5s ease;
+        /* --- House view (700x400 scene, scaled to fit) --- */
+        #houseFrame { width: 100%; aspect-ratio: 7 / 4; position: relative; overflow: hidden; border-radius: 8px; border: 1px solid #1d2733; }
+        #house {
+            width: 700px; height: 400px;
+            background: linear-gradient(to bottom, #f4ecd8 0%, #f4ecd8 74%, #e2d3b3 74%, #e2d3b3 75.2%, #a66e47 75.2%, #8f5b39 100%);
+            display: flex; justify-content: center; align-items: center;
+            font-size: 24px; position: absolute; top: 0; left: 0; overflow: hidden;
+            transform-origin: top left; isolation: isolate;
         }
+        .house-object { position: absolute; z-index: 5; transition: filter .6s ease; }
+        .fx { position: absolute; inset: 0; pointer-events: none; transition: opacity .6s ease, background .6s ease; }
+        #wash-overlay, #vignette-overlay, #night-overlay { mix-blend-mode: multiply; }
+        #moon-overlay, #light-overlay { mix-blend-mode: screen; }
+        #wash-overlay { z-index: 10; }
+        #vignette-overlay { z-index: 11; }
+        #night-overlay { z-index: 12; background: rgb(24, 32, 72); }
+        #moon-overlay { z-index: 13; background: linear-gradient(100deg, rgba(120,150,220,.45) 0 8%, rgba(90,120,200,.12) 30%, transparent 55%); }
+        #light-overlay { z-index: 14; }
+        .pendant > div { position: absolute; transition: all .6s ease; }
+        .pendant .cord { left: 349px; top: 0; width: 2px; height: 34px; background: #5b4d3f; z-index: 6; }
+        .pendant .shade { left: 325px; top: 32px; width: 50px; height: 20px; background: #5a4c3d; border-radius: 50% 50% 4px 4px / 100% 100% 4px 4px; z-index: 7; }
+        .pendant .bulb { left: 341px; top: 47px; width: 18px; height: 18px; border-radius: 50%; z-index: 6; }
+        .switch-overlay, .thermostat-overlay, .call-overlay {
+            display: none; position: absolute;
+            background: rgba(255,255,255,.95); color: var(--ink); padding: 16px 22px;
+            border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.35);
+            font-weight: 600; font-size: 20px; z-index: 999;
+        }
+        @media (prefers-reduced-motion: reduce) { .fx, .house-object, .pendant > div, .step { transition: none; } }
+        /* ?lite=1 (for the Pi): no fades */
+        .lite .fx, .lite .house-object, .lite .pendant > div, .lite .step, .lite .meter i { transition: none; }
 
-        /* Dark Blue Window Light Overlay */
-        #night-overlay {
-            background: linear-gradient(to right, rgba(255,255,255,0.1) 0%, transparent 40%), rgba(10, 20, 60, 0.7);
-            mix-blend-mode: multiply;
+        /* --- Last command card --- */
+        .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+        .card.voice { border-color: var(--accent); }
+        .card.rejected { border-color: var(--bad); background: var(--bad-soft); }
+        .card-title { display: flex; justify-content: space-between; gap: 8px; }
+        .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+        .kv span:nth-child(odd) { color: var(--muted); }
+        .kv span:nth-child(even) { font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+        .meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+        .meter i { display: block; height: 100%; background: var(--good); transition: width .3s; }
+        .muted { color: var(--muted); font-size: 12px; }
+
+        /* --- Pi health --- */
+        #health { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 10px; }
+        #health .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+        .stat { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+        .stat b { display: block; font-size: 20px; }
+        .stat.good b { color: var(--good); } .stat.warn b { color: var(--warn); } .stat.bad b { color: var(--bad); }
+        .parts { display: grid; grid-template-columns: max-content 1fr 46px; gap: 4px 8px; align-items: center; font-size: 13px; }
+        .parts .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+        .parts .bar i { display: block; height: 100%; background: var(--accent); }
+        #healthChart { width: 100%; height: 70px; display: block; }
+        .legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin: 0 4px 0 10px; }
+
+        /* --- Chat --- */
+        #chatbox { display: flex; flex-direction: column; gap: 6px; height: 260px; overflow-y: auto; padding: 4px 2px; }
+        .msg { padding: 6px 10px; border-radius: 8px; background: #f3f5f7; max-width: 92%; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .msg.user { align-self: flex-end; background: var(--accent-soft); }
+        .msg .src { font-size: 11px; color: var(--muted); margin-right: 6px; }
+
+        /* --- Widgets --- */
+        .widget-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .widget-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .widget-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+        .widget-value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .widget-box ul { margin: 0; padding-left: 18px; max-height: 110px; overflow-y: auto; }
+        .music-controls { font-size: 26px; display: flex; gap: 14px; }
+        .music-controls span { cursor: pointer; user-select: none; }
+        #music-state { overflow-wrap: anywhere; }
+
+        /* --- Commands --- */
+        .type-box { display: flex; gap: 8px; }
+        .type-box input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+        .type-box button, .button-row button {
+            padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: #f6f8fa; color: var(--ink);
         }
+        .type-box button { background: var(--accent); color: #fff; border-color: var(--accent); padding: 8px 14px; }
+        .button-row button:hover { border-color: var(--accent); }
+        details.cheats { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+        details.cheats summary { cursor: pointer; font-weight: 600; }
+        .cheat-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+        .cheat-groups b { display: block; font-size: 12px; color: var(--muted); }
+        .cheat-groups button { display: block; border: 0; background: none; padding: 1px 0; color: var(--accent); text-align: left; }
+        .cheat-groups button:hover { text-decoration: underline; }
+        .button-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .group-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+        .button-group { display: flex; flex-direction: column; gap: 6px; }
+        .button-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .button-row input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
     </style>
 </head>
 <body>
-
-    <div class="grid-container">
-        
-        <!-- QUADRANT 1 (Top Left): Main House View -->
-        <div class="top-left">
-            <h2>House View</h2>
-            <div id="house">
-                <!-- Lighting Overlays -->
-                <div id="night-overlay" style="display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none;"></div>
-                <div id="light-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9; pointer-events: none;"></div>
-                <!-- Room Objects -->
-                <img class="house-object" src="static/house_objects/bookshelf.png" style="bottom: 70px; left: 350px; height: 270px; z-index: 2;">
-                <img class="house-object" src="static/house_objects/lamp.png" style="bottom: 60px; left: -110px; height: 270px; z-index: 2;">
-                <img class="house-object" src="static/house_objects/sofa.png" style="bottom: 28px; left: 175px; width: 350px; z-index: 3;">
-                <img class="house-object" src="static/house_objects/chair.png" style="bottom: 10px; left: -60px; width: 300px; z-index: 4;">
-                <!-- Hidden Pop-ups -->
-                <div id="switch-popup" class="switch-overlay">Switch: ON</div>
-                <div id="thermostat-popup" class="thermostat-overlay">24°C</div>
-                <div id="call-popup" class="call-overlay">📞 Calling...</div>
-                <div id="reminders-popup" class="switch-overlay" style="text-align: left; font-size: 18px; white-space: pre-wrap; width: 80%;"></div>
-                <div id="info-popup" class="switch-overlay"></div>
-            </div>
+    <header class="topbar">
+        <h1>Voice Command UI</h1>
+        <div class="pipeline" id="pipeline" aria-live="polite">
+            <span class="step listening active" data-step="listening">Listening</span>
+            <span class="step recording" data-step="recording">Recording</span>
+            <span class="step decoding" data-step="decoding">Decoding</span>
+            <span class="step done" data-step="done">Done</span>
+            <span class="step rejected" data-step="rejected" hidden>Not a command</span>
         </div>
+        <button id="recordBtn" onclick="manualRecord()">🎙️ Record command</button>
+    </header>
 
-        <!-- QUADRANT 2 (Top Right): Chatbox Panel -->
-        <div class="top-right">
+    <main class="layout">
+        <!-- House View -->
+        <section class="panel house-panel">
+            <div class="panel-head">
+                <h2>House View</h2>
+                <div class="chips" id="houseChips"></div>
+            </div>
+            <div id="houseFrame">
+                <div id="house">
+                    <!-- Ceiling light -->
+                    <div class="pendant"><div class="cord"></div><div class="shade"></div><div class="bulb" id="bulb"></div></div>
+
+                    <!-- Room Objects -->
+                    <!-- Cropped from the 1366x768 PNGs (same place and size); the PNGs are the fallback -->
+                    <img class="house-object" src="static/house_objects/painting.webp" alt="" onerror="houseImageFallback(this, 'painting', 'top: 52px; left: 92px; width: 300px;')" style="top: 54.2px; left: 167.1px; width: 169.5px; z-index: 1;">
+                    <img class="house-object" src="static/house_objects/bookshelf.webp" alt="" onerror="houseImageFallback(this, 'bookshelf', 'bottom: 70px; left: 350px; height: 270px;')" style="top: 69.5px; left: 519.8px; width: 153.3px; z-index: 2;">
+                    <img class="house-object" src="static/house_objects/lamp.webp" alt="" onerror="houseImageFallback(this, 'lamp', 'bottom: 60px; left: -110px; height: 270px;')" style="top: 77px; left: 85.1px; width: 62.2px; z-index: 2;">
+                    <img class="house-object" src="static/house_objects/sofa.webp" alt="" onerror="houseImageFallback(this, 'sofa', 'bottom: 28px; left: 175px; width: 350px;')" style="top: 198.5px; left: 183.7px; width: 332.8px; z-index: 3;">
+                    <img class="house-object" src="static/house_objects/chair.webp" alt="" onerror="houseImageFallback(this, 'chair', 'bottom: 10px; left: -60px; width: 300px;')" style="top: 225.5px; left: 8.5px; width: 170.6px; z-index: 4;">
+
+                    <!-- Lighting layers (drawn by renderLighting) -->
+                    <div class="fx" id="wash-overlay"></div>
+                    <div class="fx" id="vignette-overlay"></div>
+                    <div class="fx" id="night-overlay"></div>
+                    <div class="fx" id="moon-overlay"></div>
+                    <div class="fx" id="light-overlay"></div>
+
+                    <!-- Hidden Pop-ups -->
+                    <div id="switch-popup" class="switch-overlay">Switch: ON</div>
+                    <div id="thermostat-popup" class="thermostat-overlay">24°C</div>
+                    <div id="call-popup" class="call-overlay">📞 Calling...</div>
+                    <div id="reminders-popup" class="switch-overlay" style="text-align: left; font-size: 18px; white-space: pre-wrap; width: 80%;"></div>
+                    <div id="info-popup" class="switch-overlay"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Last command + chat -->
+        <section class="panel side">
+            <div id="lastCommand" class="card">
+                <div class="card-title"><h2>Last command</h2><span class="muted" id="lcSource"></span></div>
+                <div class="muted" id="lcEmpty">Say “Alexa”, press Record command, or type a command below.</div>
+                <div class="kv" id="lcBody" hidden>
+                    <span>Heard</span><span id="lcHeard"></span>
+                    <span>Matched</span><span id="lcMatched"></span>
+                    <span>Intent</span><span id="lcIntent"></span>
+                    <span id="lcRunnerLabel">Runner-up</span><span id="lcRunner"></span>
+                </div>
+                <div id="lcScore" hidden>
+                    <div class="meter"><i id="lcMeter" style="width: 0%"></i></div>
+                    <div class="muted" id="lcScoreText"></div>
+                </div>
+            </div>
             <h2>System Chat</h2>
-            <div style="position: relative; width: 100%; height: 400px;">
-                <textarea id="chatbox" readonly style="width: 100%; height: 100%; box-sizing: border-box; resize: none; font-family: monospace; padding-bottom: 50px;"></textarea>
-                
-                <!-- The manual 3-second record button for the VCM -->
-                <button id="recordBtn" onclick="manualRecord()" style="position: absolute; bottom: 10px; right: 10px; padding: 5px 10px; cursor: pointer;">🎙️ Manual Record (3s)</button>
-                
-                <!-- The new background wake-word listener indicator -->
-                <div id="recordingIndicator" style="position: absolute; top: 10px; right: 10px; padding: 5px 10px; background: #ffe6e6; border: 1px solid #ff0000; border-radius: 4px; font-size: 14px; font-weight: bold; color: #cc0000; transition: opacity 0.2s;">
-                    🔴 Background Listening...
+            <div id="chatbox" aria-live="polite"></div>
+        </section>
+
+        <!-- Widgets -->
+        <section class="panel widgets-panel">
+            <h2>Widgets</h2>
+            <div class="widget-grid">
+                <div class="widget-box" id="lights-widget">
+                    <div class="widget-title">Lights</div>
+                    <div class="widget-value" id="lights-display">On · 100%</div>
+                    <div id="lights-color"></div>
                 </div>
-            </div>
-        </div>
-
-        <!-- QUADRANT 3 (Bottom Left): Widgets Deck -->
-        <div class="bottom-left">
-            <h2>Widgets Deck</h2>
-            
-            <div class="widget-box" id="music-widget">
-                <div class="widget-title">Music</div>
-                <div id="music-state">Stopped</div>
-                
-                <!-- Bigger symbols and Play/Stop toggle -->
-                <div style="font-size: 30px; margin-top: 5px;">
-                    <span style="cursor: pointer; margin-right: 15px;" onclick="sendCommand('music_prev')">⏮</span>
-                    <span id="playStopBtn" style="cursor: pointer;" onclick="togglePlayStop()">▶</span>
-                    <span style="cursor: pointer; margin-left: 15px;" onclick="sendCommand('music_skip')">⏭</span>
+                <div class="widget-box" id="music-widget">
+                    <div class="widget-title">Music</div>
+                    <div id="music-state">Stopped</div>
+                    <div class="music-controls">
+                        <span role="button" tabindex="0" title="Previous" onclick="sendCommand('music_prev')">⏮</span>
+                        <span role="button" tabindex="0" title="Play / pause" id="playStopBtn" onclick="togglePlayStop()">▶</span>
+                        <span role="button" tabindex="0" title="Next" onclick="sendCommand('music_skip')">⏭</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        🔊 <input type="range" id="volSlider" min="0" max="100" value="50" step="5" style="width: 90px;"
+                                 oninput="volumeDragging = true; document.getElementById('volLabel').innerText = this.value + '%'"
+                                 onchange="volumeDragging = false; updateVolume(this.value)">
+                        <span id="volLabel" style="font-size: 13px;">50%</span>
+                    </div>
                 </div>
-                
-                <!-- Volume Slider -->
-                <div style="display: flex; align-items: center; gap: 5px; margin-top: 10px; font-size: 20px;">
-                    🔊
-                    <input type="range" id="volSlider" min="0" max="100" value="50" step="5" style="width: 100px;" oninput="updateVolume(this.value)">
-                    <span id="volLabel" style="font-size: 14px; margin-left: 5px;">50%</span>
+                <div class="widget-box" id="timer-widget">
+                    <div class="widget-title">Timer</div>
+                    <div class="widget-value" id="timer-display">00:00</div>
                 </div>
-            </div>
-
-            <div class="widget-box" id="timer-widget">
-                <div class="widget-title">Timer</div>
-                <div id="timer-display">00:00</div>
-            </div>
-
-            <div class="widget-box" id="alarm-widget">
-                <div class="widget-title">Alarms</div>
-                <ul id="alarm-list" style="margin: 0; padding-left: 20px;"></ul>
-            </div>
-
-            <div class="widget-box" id="thermostat-widget">
-                <div class="widget-title">Thermostat</div>
-                <div id="thermostat-display">24°C</div>
-            </div>
-
-            <div class="widget-box" id="reminder-widget">
-                <div class="widget-title">Reminders</div>
-                <ul id="reminder-list" style="margin: 0; padding-left: 20px;"></ul>
-            </div>
-        </div>
-
-        <!-- QUADRANT 4 (Bottom Right): Commands & Buttons -->
-        <div class="bottom-right">
-            <h2>Manual Commands</h2>
-        
-            <!-- NEW: Text Simulation Box -->
-            <div style="margin-bottom: 20px; padding: 10px; background: #e0e0e0; border: 1px solid #999;">
-                <div class="group-title">Simulate Voice Transcription</div>
-                <input type="text" id="voiceManualInput" style="width: 60%;" placeholder="e.g., turn on lights">
-                <button onclick="manualTranscription()">Execute Text</button>
-            </div>
-            
-            <!-- Group 1: Lighting & Temperature -->
-            <div class="button-group">
-                <div class="group-title">IoT Controls</div>
-                <div class="button-row">
-                    <button id="toggleBtn" onclick="sendCommand('toggle')">Turn off lights</button>
-                    <button onclick="sendValueCommand('dim', 'dimInput')">Dim lights to</button>
-                    <input type="number" id="dimInput" style="width: 50px;"> %
+                <div class="widget-box" id="thermostat-widget">
+                    <div class="widget-title">Thermostat</div>
+                    <div class="widget-value" id="thermostat-display">24°C</div>
                 </div>
-                <div class="button-row">
-                    <span>Color:</span>
-                    <button onclick="sendCommand('color', 'blue')">Blue</button>
-                    <button onclick="sendCommand('color', 'red')">Red</button>
-                    <button onclick="sendCommand('color', 'green')">Green</button>
-                    <button onclick="sendCommand('color', 'none')">None</button>
+                <div class="widget-box" id="alarm-widget">
+                    <div class="widget-title">Alarms</div>
+                    <ul id="alarm-list"></ul>
                 </div>
-                <div class="button-row">
-                    <button onclick="sendValueCommand('temp', 'tempInput')">Set temperature to</button>
-                    <input type="number" id="tempInput" style="width: 50px;"> degrees
+                <div class="widget-box" id="reminder-widget">
+                    <div class="widget-title">Reminders</div>
+                    <ul id="reminder-list"></ul>
                 </div>
             </div>
 
-            <!-- Group 2: Media -->
-            <div class="button-group">
-                <div class="group-title">Media Controls</div>
-                <div class="button-row">
-                    <button onclick="sendCommand('music_play')">Play music</button>
-                    <button onclick="sendCommand('music_pause')">Pause</button>
-                    <button onclick="sendCommand('music_stop')">Stop</button>
-                    <button onclick="sendCommand('music_prev')">Prev</button>
-                    <button onclick="sendCommand('music_skip')">Next/Skip</button>
+            <!-- Pi health (shown once the server sends readings) -->
+            <div id="health" hidden>
+                <div class="head"><span class="widget-title">Pi health</span><span class="muted" id="healthNote">updates every 2 s</span></div>
+                <div class="stats">
+                    <div class="stat" id="stTemp"><span class="muted">Temperature</span><b id="hTemp">–</b><span class="muted">slows itself at 80°C</span></div>
+                    <div class="stat" id="stCpu"><span class="muted">CPU</span><b id="hCpu">–</b><span class="muted" id="hCores"></span></div>
+                    <div class="stat" id="stMem"><span class="muted">Memory</span><b id="hMem">–</b><span class="muted" id="hMemTotal"></span></div>
+                    <div class="stat" id="stClock"><span class="muted">Clock</span><b id="hClock">–</b><span class="muted" id="hThrottle"></span></div>
                 </div>
-                <div class="button-row">
-                    <button onclick="sendCommand('music_vol_up')">Volume Up</button>
-                    <button onclick="sendCommand('music_vol_down')">Volume Down</button>
+                <div>
+                    <div class="muted">CPU by part of the project (share of the whole machine)</div>
+                    <div class="parts">
+                        <span>Voice engine</span><div class="bar"><i id="pEngine" style="width:0"></i></div><span id="vEngine">–</span>
+                        <span>Server + music</span><div class="bar"><i id="pServer" style="width:0"></i></div><span id="vServer">–</span>
+                        <span>Browser</span><div class="bar"><i id="pBrowser" style="width:0"></i></div><span id="vBrowser">–</span>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Group 3: Time & Search -->
-            <div class="button-group">
-                <div class="group-title">Search & Questions</div>
-                <div class="button-row">
-                    <button onclick="sendCommand('weather')">Weather</button>
-                    <button onclick="sendCommand('time')">Time</button>
+                <div>
+                    <div class="muted legend">Last 5 minutes<i style="background: var(--warn)"></i>temperature (40–85°C)<i style="background: var(--accent)"></i>CPU (0–100%)</div>
+                    <canvas id="healthChart"></canvas>
                 </div>
             </div>
+        </section>
 
-            <!-- Group 4: Alarms & Timers -->
-            <div class="button-group">
-                <div class="group-title">Alarms & Timers</div>
-                <div class="button-row">
-                    <button onclick="setTimerCommand()">Set timer for</button>
-                    <input type="number" id="timerMinInput" style="width: 40px;" min="0" placeholder="Min"> m
-                    <input type="number" id="timerSecInput" style="width: 40px;" min="0" placeholder="Sec"> s
+        <!-- Commands -->
+        <section class="panel commands">
+            <h2>Commands</h2>
+            <div class="type-box">
+                <input type="text" id="voiceManualInput" list="commandSuggestions" placeholder="Type a command, e.g. turn on the lights" autocomplete="off"
+                       onkeydown="if (event.key === 'Enter') manualTranscription()">
+                <button onclick="manualTranscription()">Run</button>
+            </div>
+            <datalist id="commandSuggestions"></datalist>
+            <details class="cheats">
+                <summary>What can I say?</summary>
+                <div class="cheat-groups" id="cheatGroups"><span class="muted">Loading the command list…</span></div>
+            </details>
+
+            <div class="button-groups">
+                <div class="button-group">
+                    <div class="group-title">Lights & Temperature</div>
+                    <div class="button-row">
+                        <button id="toggleBtn" onclick="sendCommand('toggle')">Turn off lights</button>
+                        <button onclick="sendValueCommand('dim', 'dimInput')">Dim lights to</button>
+                        <input type="number" id="dimInput" min="0" max="100" style="width: 60px;"> %
+                    </div>
+                    <div class="button-row">
+                        <span>Color:</span>
+                        <button onclick="sendCommand('color', 'none')">Fire</button>
+                        <button onclick="sendCommand('color', 'red')">Red</button>
+                        <button onclick="sendCommand('color', 'blue')">Blue</button>
+                        <button onclick="sendCommand('color', 'green')">Green</button>
+                    </div>
+                    <div class="button-row">
+                        <button onclick="sendValueCommand('temp', 'tempInput')">Set temperature to</button>
+                        <input type="number" id="tempInput" style="width: 60px;"> °C
+                    </div>
                 </div>
-                <div class="button-row">
-                    <button onclick="sendTextCommand('alarm', 'alarmInput')">Set alarm for</button>
-                    <input type="time" id="alarmInput" style="width: 110px;">
+
+                <div class="button-group">
+                    <div class="group-title">Media</div>
+                    <div class="button-row">
+                        <button onclick="sendCommand('music_play')">Play</button>
+                        <button onclick="sendCommand('music_pause')">Pause</button>
+                        <button onclick="sendCommand('music_stop')">Stop</button>
+                        <button onclick="sendCommand('music_prev')">Prev</button>
+                        <button onclick="sendCommand('music_skip')">Next</button>
+                    </div>
+                    <div class="button-row">
+                        <button onclick="sendCommand('music_vol_up')">Volume up</button>
+                        <button onclick="sendCommand('music_vol_down')">Volume down</button>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <div class="group-title">Alarms & Timers</div>
+                    <div class="button-row">
+                        <button onclick="setTimerCommand()">Set timer for</button>
+                        <input type="number" id="timerMinInput" style="width: 50px;" min="0" placeholder="Min"> m
+                        <input type="number" id="timerSecInput" style="width: 50px;" min="0" placeholder="Sec"> s
+                    </div>
+                    <div class="button-row">
+                        <button onclick="sendTextCommand('alarm', 'alarmInput')">Set alarm for</button>
+                        <input type="time" id="alarmInput" style="width: 120px;">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <div class="group-title">Info, Reminders & Calls</div>
+                    <div class="button-row">
+                        <button onclick="sendCommand('weather')">Weather</button>
+                        <button onclick="sendCommand('time')">Time</button>
+                        <button onclick="sendCommand('get_reminders')">My reminders</button>
+                    </div>
+                    <div class="button-row">
+                        <button onclick="sendTextCommand('reminder', 'reminderInput')">Add reminder</button>
+                        <input type="text" id="reminderInput" style="width: 130px;" placeholder="e.g. buy groceries">
+                    </div>
+                    <div class="button-row">
+                        <button onclick="sendCommand('call_mom')">Call Mom</button>
+                        <button onclick="sendCommand('call_dad')">Call Dad</button>
+                        <button onclick="sendCommand('message')">Message</button>
+                    </div>
                 </div>
             </div>
-
-            <!-- Group 5: Productivity & Comms[cite: 1] -->
-            <div class="button-group">
-                <div class="group-title">Productivity & Calls</div>
-                <div class="button-row">
-                    <button onclick="sendTextCommand('reminder', 'reminderInput')">Add Reminder</button>
-                    <input type="text" id="reminderInput" style="width: 120px;" placeholder="e.g. buy groceries">
-                    <button onclick="sendCommand('get_reminders')">What are my reminders</button>
-                </div>
-                <div class="button-row">
-                    <button onclick="sendCommand('call_mom')">Call Mom</button>
-                    <button onclick="sendCommand('call_dad')">Call Dad</button>
-                </div>
-            </div>
-
-        </div>
-    </div>
+        </section>
+    </main>
 
     <script>
-        let lightsOn = true;
+        if (new URLSearchParams(location.search).has('lite')) document.documentElement.classList.add('lite');
 
-        let isMusicPlaying = false;
+        // WebP missing or unsupported: use the original full-size PNG, else hide the object
+        function houseImageFallback(img, name, style) {
+            if (img.dataset.fallback) { img.hidden = true; return; }
+            img.dataset.fallback = '1';
+            img.style.cssText = style + ' z-index: ' + img.style.zIndex + ';';
+            img.src = 'static/house_objects/' + name + '.png';
+        }
+
+        // ---------- Lighting ----------
+        // One state drives the whole scene. Startup: on, 100%, fire.
+        const light = { on: true, brightness: 100, color: 'fire' };
+        const LIGHT_COLORS = { fire: [255, 147, 41], red: [240, 82, 70], blue: [88, 132, 255], green: [72, 205, 128] };
+        const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+        const tintOf = (c, k) => c.map(v => Math.round(255 - (255 - v) * k));   // white -> colour by k
+
+        function renderLighting() {
+            const c = LIGHT_COLORS[light.color] || LIGHT_COLORS.fire;
+            const on = light.on && light.brightness > 0;
+            const p = on ? Math.sqrt(light.brightness / 100) : 0;   // perceptual: 50% still looks usable
+            const el = id => document.getElementById(id);
+
+            // Coloured light tints the walls and furniture
+            el('wash-overlay').style.background = rgba(tintOf(c, light.color === 'fire' ? 0.42 : 0.55), 1);
+            el('wash-overlay').style.opacity = on ? 0.35 + 0.65 * p : 0;
+            // Room edges fall off first as the light dims
+            el('vignette-overlay').style.background =
+                `radial-gradient(ellipse ${60 + 60 * p}% ${70 + 70 * p}% at 50% 12%, transparent 0 25%, rgba(18,20,38,${0.4 + 0.5 * (1 - p)}) 100%)`;
+            el('vignette-overlay').style.opacity = on ? 1 : 0;
+            // Night: deep blue, with faint moonlight from the left
+            el('night-overlay').style.opacity = on ? 0.55 * (1 - p) : 0.92;
+            el('moon-overlay').style.opacity = on ? 0.15 * (1 - p) : 1;
+            // Glow pooling under the ceiling light
+            el('light-overlay').style.background =
+                `radial-gradient(ellipse ${25 + 30 * p}% ${30 + 35 * p}% at 50% 16%, ${rgba(tintOf(c, 0.5), 0.9)}, ${rgba(c, 0.25)} 50%, transparent 75%)`;
+            el('light-overlay').style.opacity = on ? p : 0;
+            el('bulb').style.background = on ? rgba(tintOf(c, 0.35), 1) : '#7c7a74';
+            el('bulb').style.boxShadow = on ? `0 0 ${8 + 22 * p}px ${3 + 8 * p}px ${rgba(c, 0.7 * p)}` : 'none';
+            // Shadows: short and soft straight down when lit, long to the right by moonlight
+            const shadow = on
+                ? `drop-shadow(0 ${6 + 6 * (1 - p)}px ${6 + 6 * (1 - p)}px ${rgba(c.map(v => Math.round(v * 0.12)), 0.45 + 0.25 * p)})`
+                : 'drop-shadow(14px 6px 10px rgba(5,8,25,.65))';
+            document.querySelectorAll('.house-object').forEach(o => o.style.filter = shadow);
+
+            // Widget, chips and toggle button
+            const name = light.color[0].toUpperCase() + light.color.slice(1);
+            el('lights-display').innerText = light.on ? `On · ${light.brightness}%` : 'Off';
+            el('lights-color').innerHTML = `<span class="swatch" style="background:${rgba(c, 1)}"></span>${name}`;
+            el('toggleBtn').innerText = light.on ? 'Turn off lights' : 'Turn on lights';
+            renderChips();
+        }
+
+        // ---------- Music ----------
+        let music = { status: 'stopped', song: null, volume: 50 };
+        let volumeDragging = false;
+
+        function applyMusic(m) {
+            if (!m) return;
+            music = m;
+            const state = document.getElementById('music-state');
+            if (m.status === 'playing') state.innerText = m.song || 'Playing';
+            else if (m.status === 'paused') state.innerText = 'Paused: ' + (m.song || '');
+            else state.innerText = 'Stopped';
+            document.getElementById('playStopBtn').innerText = m.status === 'playing' ? '⏸' : '▶';
+            if (!volumeDragging && typeof m.volume === 'number') {
+                document.getElementById('volSlider').value = m.volume;
+                document.getElementById('volLabel').innerText = m.volume + '%';
+            }
+            renderChips();
+        }
 
         function togglePlayStop() {
-            const btn = document.getElementById("playStopBtn");
-            if (isMusicPlaying) {
-                sendCommand('music_stop'); // Sends stop command to Python
-                btn.innerText = "▶";       // Changes symbol back to Play
-                isMusicPlaying = false;
-            } else {
-                sendCommand('music_play'); // Sends play command to Python
-                btn.innerText = "⏹";       // Changes symbol to Stop
-                isMusicPlaying = true;
-            }
+            sendCommand(music.status === 'playing' ? 'music_pause' : 'music_play');
         }
 
-        function updateChat(message) {
+        function updateVolume(val) {
+            document.getElementById('volLabel').innerText = val + '%';
+            sendCommand('music_vol_set', parseInt(val));
+        }
+
+        // ---------- House chips ----------
+        function renderChips() {
+            const c = LIGHT_COLORS[light.color] || LIGHT_COLORS.fire;
+            const chips = [
+                `<span class="chip"><span class="swatch" style="background:${rgba(c, 1)}"></span>Lights ${light.on ? light.brightness + '%' : 'off'}</span>`,
+                `<span class="chip">${document.getElementById('thermostat-display').innerText}</span>`,
+                `<span class="chip">🔊 ${music.volume}%</span>`,
+            ];
+            if (music.status !== 'stopped' && music.song) chips.push(`<span class="chip">${music.status === 'playing' ? '♪' : '⏸'} ${escapeHtml(music.song)}</span>`);
+            document.getElementById('houseChips').innerHTML = chips.join('');
+        }
+
+        // ---------- Chat ----------
+        const SOURCE_ICON = { voice: '🎙 voice', typed: '⌨ typed', button: '🖱 button' };
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+
+        const CHAT_MAX_LINES = 50;
+        function updateChat(message, source = null, fromUser = false) {
             const chat = document.getElementById("chatbox");
-            chat.value += message + "\n";
-            chat.scrollTop = chat.scrollHeight; 
+            const line = document.createElement('div');
+            line.className = 'msg' + (fromUser ? ' user' : '');
+            if (source) {
+                const tag = document.createElement('span');
+                tag.className = 'src';
+                tag.textContent = SOURCE_ICON[source] || source;
+                line.appendChild(tag);
+            }
+            line.appendChild(document.createTextNode(message));
+            chat.appendChild(line);
+            while (chat.childElementCount > CHAT_MAX_LINES) chat.firstElementChild.remove();
+            chat.scrollTop = chat.scrollHeight;
         }
 
-        async function sendCommand(action, value = null) {
+        // ---------- Formatting helpers ----------
+        function formatAlarm(v) {
+            // '06:00:00' (voice) or '06:00' (time picker) -> '6:00 AM'
+            const parts = String(v).split(':');
+            const h = parseInt(parts[0]), m = parseInt(parts[1] || '0');
+            if (isNaN(h)) return String(v);
+            return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+        }
+
+        function addListItem(listId, text) {
+            const li = document.createElement('li');
+            li.textContent = text;
+            document.getElementById(listId).appendChild(li);
+        }
+
+        function describeIntent(action, value) {
+            if (value === null || value === undefined) return action;
+            if (typeof value === 'object') return `${action} → ${value.minutes || 0} min ${value.seconds || 0} s`;
+            return `${action} → ${value}`;
+        }
+
+        // ---------- Command executor (every source ends here) ----------
+        async function sendCommand(action, value = null, source = 'button') {
+            // Dimming needs the lights on
+            if (action === 'dim' && !light.on) {
+                updateChat("System: The lights are off. Turn them on first.", source);
+                return;
+            }
+            let data;
             try {
                 const response = await fetch('/command', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: action, value: value })
                 });
-                
-                const data = await response.json();
-                
+                data = await response.json();
+            } catch (error) {
+                updateChat("System: Can't reach the server. Is main_ui.py running?", source);
+                return;
+            }
+            applyCommand(action, value, data, source);
+        }
+
+        // Shows a command's result on the page (data = the server's response)
+        function applyCommand(action, value, data, source) {
+            if (action === 'dim' && !light.on) {
+                updateChat("System: The lights are off. Turn them on first.", source);
+                return;
+            }
+            {
                 if (data.status === "error") {
-                    updateChat("Sorry, the command is not recognized.");
+                    updateChat(data.message || "Sorry, the command is not recognized.", source);
                     return;
                 }
 
-                // Handle local UI updates based on the action[cite: 1]
-                const house = document.getElementById("house");
                 if (action === 'toggle') {
-                showPopup('switch-popup', lightsOn ? "Switch: OFF" : "Switch: ON", 1000);
-                const lightOverlay = document.getElementById("light-overlay");
-                const nightOverlay = document.getElementById("night-overlay");
-                const objects = document.querySelectorAll(".house-object");
-                
-                if (lightsOn) {
-                    // Turn OFF: Fade out main light, fade IN base darkness
-                    lightOverlay.style.opacity = "0";
-                    nightOverlay.style.opacity = "1";
-                    objects.forEach(obj => obj.style.filter = "drop-shadow(20px 10px 15px rgba(0,0,0,0.8))");
-                    document.getElementById("toggleBtn").innerText = "Turn on lights";
-                    lightsOn = false;
-                } else {
-                    // Turn ON: Fade in main light, fade OUT base darkness
-                    lightOverlay.style.opacity = "1";
-                    nightOverlay.style.opacity = "0";
-                    objects.forEach(obj => obj.style.filter = "drop-shadow(20px 10px 15px rgba(0,0,0,0.8)) drop-shadow(0px 15px 10px rgba(0,0,0,0.5))");
-                    document.getElementById("toggleBtn").innerText = "Turn off lights";
-                    lightsOn = true;
-                }
+                    light.on = value === 'on' ? true : value === 'off' ? false : !light.on;
+                    if (light.on && light.brightness === 0) light.brightness = 100;
+                    renderLighting();
+                    showPopup('switch-popup', light.on ? "Switch: ON" : "Switch: OFF", 1000);
                 } else if (action === 'dim') {
-                    if (!lightsOn) return; 
-                    
-                    const lightOverlay = document.getElementById("light-overlay");
-                    const nightOverlay = document.getElementById("night-overlay");
-                    const objects = document.querySelectorAll(".house-object");
-                    
-                    // Applies the square root math to keep brightness higher for longer
-                    let linearValue = value / 100;
-                    let opacityValue = Math.sqrt(linearValue);
-                    
-                    lightOverlay.style.opacity = opacityValue;
-                    nightOverlay.style.opacity = 1 - opacityValue;
-                    
-                    let lightShadowOpacity = 0.5 * opacityValue;
-                    objects.forEach(obj => obj.style.filter = `drop-shadow(20px 10px 15px rgba(0,0,0,0.8)) drop-shadow(0px 15px 10px rgba(0,0,0,${lightShadowOpacity}))`);
+                    light.brightness = value;
+                    renderLighting();
+                    showPopup('info-popup', `Brightness ${value}%`, 1200);
                 } else if (action === 'color') {
-                    const lightOverlay = document.getElementById("light-overlay");
-                    
-                    // Increased the color density from 0.5 to 0.8 so it shines through the darkness
-                    let colorCode = 'rgba(255, 150, 0, 0.8)'; 
-                    
-                    if (data.value === 'blue') colorCode = 'rgba(0, 0, 255, 0.8)';
-                    else if (data.value === 'red') colorCode = 'rgba(255, 0, 0, 0.8)';
-                    else if (data.value === 'green') colorCode = 'rgba(0, 255, 0, 0.8)';
-
-                    lightOverlay.style.background = `radial-gradient(circle at top center, ${colorCode}, transparent)`;
-                    
-                    showPopup('info-popup', `Lights adjust to color ${data.display_color}.`, 2000);
+                    light.color = (value && value !== 'none') ? value : 'fire';
+                    renderLighting();
+                    showPopup('info-popup', light.on ? `Lights adjust to color ${data.display_color}.` : `Color ${data.display_color} saved for when the lights are on.`, 2000);
                 } else if (action === 'temp') {
                     document.getElementById('thermostat-display').innerText = value + "°C";
+                    renderChips();
                     showPopup('thermostat-popup', value + "°C", 1000);
                 } else if (action === 'timer') {
                     // Play whistle sound effect immediately
-                    const whistle = new Audio('static/whistle.mp3'); 
+                    const whistle = new Audio('static/whistle.mp3');
                     whistle.play().catch(e => console.log("Audio play error:", e));
-
                     let totalSeconds = (data.minutes * 60) + data.seconds;
-                    
-                    // Clear any existing timer to prevent overlapping countdowns
-                    if (typeof countdownInterval !== 'undefined') {
-                        clearInterval(countdownInterval);
-                    }
-
+                    if (typeof countdownInterval !== 'undefined') clearInterval(countdownInterval);
                     function updateTimerDisplay(secs) {
                         let mins = Math.floor(secs / 60);
                         let remSecs = secs % 60;
-                        document.getElementById('timer-display').innerText = 
+                        document.getElementById('timer-display').innerText =
                             (mins < 10 ? "0" + mins : mins) + ":" + (remSecs < 10 ? "0" + remSecs : remSecs);
                     }
-
-                    // Set initial display
                     updateTimerDisplay(totalSeconds);
-
-                    // Tick down second-by-second
                     countdownInterval = setInterval(() => {
                         totalSeconds--;
                         if (totalSeconds < 0) {
@@ -380,246 +608,350 @@
                             updateTimerDisplay(totalSeconds);
                         }
                     }, 1000);
-                }else if (action === 'alarm') {
-                    const list = document.getElementById('alarm-list');
-                    list.innerHTML += `<li>Alarm: ${value}</li>`;
+                } else if (action === 'alarm') {
+                    addListItem('alarm-list', 'Alarm: ' + formatAlarm(value));
                 } else if (action === 'reminder') {
-                    const list = document.getElementById('reminder-list');
-                    list.innerHTML += `<li>${value}</li>`;
-                } else if (action === 'music_play' || action === 'music_skip' || action === 'music_prev') {
-                    if (data.song) {
-                        document.getElementById('music-state').innerText = data.song;
-                    }
-                    document.getElementById('playStopBtn').innerText = "⏹";
-                    isMusicPlaying = true;
-                } else if (action === 'music_pause') {
-                    if (data.song) {
-                        document.getElementById('music-state').innerText = "Paused: " + data.song;
-                    }
-                    document.getElementById('playStopBtn').innerText = "▶";
-                    isMusicPlaying = false;
-                } else if (action === 'music_stop') {
-                    document.getElementById('music-state').innerText = "Stopped";
-                    document.getElementById('playStopBtn').innerText = "▶";
-                    isMusicPlaying = false;
-                } else if (action === 'music_vol_up') {
-                    changeVolume(20);
-                } else if (action === 'music_vol_down') {
-                    changeVolume(-20);
+                    addListItem('reminder-list', value);
+                } else if (action.startsWith('music_')) {
+                    applyMusic(data.music);
                 } else if (action === 'get_reminders') {
                     showPopup('reminders-popup', "Your Reminders:\n\n" + data.data, 4000);
                 } else if (action === 'call_mom' || action === 'call_dad') {
                     showPopup('call-popup', action === 'call_mom' ? '📞 Calling Mom' : '📞 Calling Dad', 2000);
-                    
-                    // Fetch and play the local ringtone
                     const ringtone = new Audio('/ringtone');
                     ringtone.play().catch(e => console.log("Audio play error:", e));
-                    
-                    // Force the ringtone to stop exactly after 2 seconds
-                    setTimeout(() => {
-                        ringtone.pause();
-                        ringtone.currentTime = 0; // Resets the audio track
-                    }, 2000);
+                    setTimeout(() => { ringtone.pause(); ringtone.currentTime = 0; }, 2000);
+                } else if (action === 'message') {
+                    showPopup('info-popup', '✉️ Opening messages', 2000);
                 } else if (action === 'weather' || action === 'time') {
-                    // NEW: Triggers the 3-second pop-up with the server's text response
                     showPopup('info-popup', data.message, 3000);
                 }
 
-                updateChat(data.message);
-
-            } catch (error) {
-                alert("Failed to connect to the system server."); 
+                // The slider already shows the new volume; skip the chat line for each drag
+                if (action !== 'music_vol_set') updateChat(data.message, source);
             }
         }
 
-        // Helper to show pop-ups over the house graphic[cite: 1]
+        // Voice and typed results land here; shows them in the Last command card, then runs them.
+        function handleIntent(source, r) {
+            showLastCommand(source, r);
+            if (source === 'voice') updateChat(r.text ? `"${r.text}"` : '(no command)', source, true);
+            else updateChat(r.text, source, true);
+            if (r.action === "Unrecognized" || !r.action) {
+                updateChat(source === 'voice'
+                    ? "System: Didn't catch a command." + (r.heard ? ` Heard: "${r.heard}".` : '')
+                    : "Sorry, the command is not recognized.", source);
+                if (source === 'voice') flashResult('rejected');
+                return;
+            }
+            if (source === 'voice') flashResult('done');
+            if (r.response) applyCommand(r.action, r.value, r.response, source);   // the server already ran it
+            else sendCommand(r.action, r.value, source);
+        }
+
+        function showLastCommand(source, r) {
+            const rejected = r.action === 'Unrecognized' || !r.action;
+            const card = document.getElementById('lastCommand');
+            card.className = 'card' + (source === 'voice' ? ' voice' : '') + (rejected ? ' rejected' : '');
+            document.getElementById('lcEmpty').hidden = true;
+            document.getElementById('lcBody').hidden = false;
+            document.getElementById('lcSource').innerText = SOURCE_ICON[source] + ' · ' + new Date().toLocaleTimeString();
+            document.getElementById('lcHeard').innerText = (source === 'voice' ? r.heard : r.text) || '—';
+            document.getElementById('lcMatched').innerText = rejected ? 'nothing (rejected)' : (r.text || '—');
+            document.getElementById('lcIntent').innerText = rejected ? 'Unrecognized' : describeIntent(r.action, r.value);
+
+            const top = Array.isArray(r.top) ? r.top : [];
+            // Rejected: show the closest command; accepted: show the runner-up
+            const runner = rejected ? (top.length ? top[0][0] : null) : (top.length > 1 ? top[1][0] : null);
+            document.getElementById('lcRunnerLabel').innerText = rejected ? 'Closest' : 'Runner-up';
+            document.getElementById('lcRunnerLabel').hidden = !runner;
+            document.getElementById('lcRunner').hidden = !runner;
+            document.getElementById('lcRunner').innerText = runner || '';
+
+            // Score: how clearly the best command beat the runner-up, and the filler-only path
+            const score = document.getElementById('lcScore');
+            if (source === 'voice' && top.length && top[0][1] !== null) {
+                const gap = top.length > 1 && top[1][1] !== null ? top[0][1] - top[1][1] : 20;
+                const sure = 1 / (1 + Math.exp(-gap));
+                document.getElementById('lcMeter').style.width = (rejected ? 0 : Math.round(sure * 100)) + '%';
+                const parts = [];
+                if (!rejected) parts.push(`${Math.round(sure * 100)}% vs runner-up`);
+                if (typeof r.margin === 'number') parts.push(`${r.margin >= 0 ? '+' : ''}${r.margin.toFixed(1)} over filler`);
+                if (typeof r.infer_ms === 'number') parts.push(`VCM ${Math.round(r.infer_ms)} ms`);
+                if (typeof r.decode_ms === 'number') parts.push(`beam ${Math.round(r.decode_ms)} ms`);
+                document.getElementById('lcScoreText').innerText = parts.join(' · ');
+                score.hidden = false;
+            } else {
+                score.hidden = true;
+            }
+        }
+
+        // ---------- Pop-ups ----------
         function showPopup(elementId, text, durationMs) {
             const popup = document.getElementById(elementId);
             popup.innerText = text;
             popup.style.display = "block";
-            setTimeout(() => {
-                popup.style.display = "none";
-            }, durationMs);
+            clearTimeout(popup._hideTimer);
+            popup._hideTimer = setTimeout(() => { popup.style.display = "none"; }, durationMs);
         }
 
+        // ---------- Manual inputs ----------
         function sendValueCommand(action, inputId) {
             const inputField = document.getElementById(inputId);
-            if (inputField.value === "") return; 
+            if (inputField.value === "") return;
             sendCommand(action, parseInt(inputField.value));
         }
 
         function sendTextCommand(action, inputId) {
             const inputField = document.getElementById(inputId);
-            if (inputField.value === "") return; 
+            if (inputField.value === "") return;
             sendCommand(action, inputField.value);
-            inputField.value = ""; // Clear after sending
+            inputField.value = "";
         }
 
-        function changeVolume(amount) {
-            const slider = document.getElementById("volSlider");
-            let newVal = parseInt(slider.value) + amount;
-            
-            // Keep the volume between 0 and 100
-            if (newVal > 100) newVal = 100;
-            if (newVal < 0) newVal = 0;
-            
-            slider.value = newVal; // Move the visual slider
-            updateVolume(newVal);  // Update the text label and send to server
+        let countdownInterval;
+        function setTimerCommand() {
+            const minInput = document.getElementById('timerMinInput').value;
+            const secInput = document.getElementById('timerSecInput').value;
+            const m = Math.round(parseFloat(minInput)) || 0;
+            const s = Math.round(parseFloat(secInput)) || 0;
+            if (m === 0 && s === 0) return;
+            document.getElementById('timerMinInput').value = "";
+            document.getElementById('timerSecInput').value = "";
+            sendCommand('timer', { minutes: m, seconds: s });
         }
 
-        function updateVolume(val) {
-            document.getElementById("volLabel").innerText = val + "%";
-            // Send the specific volume value to the backend player
-            sendCommand('music_vol_set', parseInt(val));
-        }
-
-        let blinkInterval;
-        let isRecordingMode = false;
-
-        function startBackgroundListener() {
-            const indicator = document.getElementById("recordingIndicator");
-            
-            // Flashes every 0.5 seconds if NOT in recording mode
-            blinkInterval = setInterval(() => {
-                if (!isRecordingMode) {
-                    indicator.style.opacity = indicator.style.opacity === "1" ? "0.4" : "1";
-                } else {
-                    indicator.style.opacity = "1"; // Stay solid during command mode
-                }
-            }, 500); 
-
-            // Poll the backend every 500ms to check if the Wake Word triggered
-            setInterval(async () => {
-                try {
-                    const response = await fetch('/get_status');
-                    const data = await response.json();
-                    
-                    if (data.status === 'recording' && !isRecordingMode) {
-                        isRecordingMode = true;
-                        indicator.innerText = "🎙️ Voice Command Mode...";
-                        indicator.style.background = "#fff3cd"; // Yellow warning background
-                        indicator.style.color = "#856404";
-                        indicator.style.borderColor = "#ffeeba";
-                    } else if (data.status === 'listening' && isRecordingMode) {
-                        isRecordingMode = false;
-                        indicator.innerText = "🔴 Background Listening...";
-                        indicator.style.background = "#ffe6e6"; // Original red background
-                        indicator.style.color = "#cc0000";
-                        indicator.style.borderColor = "#ff0000";
-                    }
-                } catch (error) {
-                    // Ignore connection errors during polling
-                }
-            }, 500);
-        }
-
-        let lastVoiceId = null;
-
-        async function pollVoiceResult() {
-            try {
-                const r = await fetch('/get_voice_result');
-                const d = await r.json();
-                if (lastVoiceId === null) { lastVoiceId = d.id; return; } // ignore old results on page load
-                if (d.id !== lastVoiceId) {
-                    lastVoiceId = d.id;
-                    updateChat('Voice: "' + d.text + '"');
-                    if (d.action === "Unrecognized") {
-                        updateChat("Sorry, the command is not recognized.");
-                    } else {
-                        sendCommand(d.action, d.value);
-                    }
-                }
-            } catch (e) {}
-        }
-
-        // Extract data from Excel files on startup
-        // Trigger the background listener on startup while keeping data loading[cite: 11]
-        window.onload = async function() {
-            startBackgroundListener(); // Start the 0.5s loop immediately
-            setInterval(pollVoiceResult, 500);
-            
-            try {
-                const response = await fetch('/get_data');
-                const data = await response.json();
-                
-                const alarmList = document.getElementById('alarm-list');
-                data.alarms.forEach(alarm => { alarmList.innerHTML += `<li>Alarm: ${alarm}</li>`; });
-                
-                const reminderList = document.getElementById('reminder-list');
-                data.reminders.forEach(rem => { reminderList.innerHTML += `<li>${rem}</li>`; });
-            } catch (error) {
-                console.log("No previous data found.");
-            }
-        };
-
-        // Rename simulateRecording to manualRecord and remove "Simulate"[cite: 11]
-        function manualRecord() {
-            const btn = document.getElementById("recordBtn");
-            btn.innerText = "Recording... (3s)";
-            btn.disabled = true;
-
-            // Signal the backend to trigger the Voice Command pipeline
-            fetch('/manual_record', { method: 'POST' })
-                .then(() => {
-                    setTimeout(() => {
-                        btn.innerText = "🎙️ Manual Record (3s)";
-                        btn.disabled = false;
-                    }, 3500); // Wait for the 3s recording + processing time to finish
-                })
-                .catch(() => {
-                    updateChat("System: Failed to trigger manual record.");
-                    btn.innerText = "🎙️ Manual Record (3s)";
-                    btn.disabled = false;
-                });
-        }
-
-        // Rename simulateTranscription to manualTranscription[cite: 11]
         async function manualTranscription() {
             const textInput = document.getElementById('voiceManualInput');
             const text = textInput.value;
-            
-            if (!text.trim()) return; 
-
+            if (!text.trim()) return;
             try {
                 const response = await fetch('/parse_text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: text })
                 });
-                
                 const data = await response.json();
-                
-                if (data.action === "Unrecognized") {
-                    updateChat("Sorry, the command is not recognized.");
-                } else {
-                    sendCommand(data.action, data.value);
-                }
-                
-                textInput.value = ""; 
-                
+                handleIntent('typed', { text: text, action: data.action, value: data.value });
+                textInput.value = "";
             } catch (error) {
-                updateChat("System: Failed to parse text.");
+                updateChat("System: Failed to parse text.", 'typed');
             }
         }
 
-        let countdownInterval;
-
-        function setTimerCommand() {
-            const minInput = document.getElementById('timerMinInput').value;
-            const secInput = document.getElementById('timerSecInput').value;
-            
-            // Round off when decimal is entered
-            const m = Math.round(parseFloat(minInput)) || 0;
-            const s = Math.round(parseFloat(secInput)) || 0;
-            
-            if (m === 0 && s === 0) return;
-            
-            // Clear inputs after sending
-            document.getElementById('timerMinInput').value = "";
-            document.getElementById('timerSecInput').value = "";
-            
-            sendCommand('timer', { minutes: m, seconds: s });
+        // ---------- Pi health ----------
+        const healthHistory = [];
+        function levelClass(v, warn, bad) { return v === null || v === undefined ? '' : v >= bad ? 'bad' : v >= warn ? 'warn' : 'good'; }
+        function setText(id, t) { document.getElementById(id).innerText = t; }
+        function onMetrics(m, redraw = true) {
+            healthHistory.push(m);
+            while (healthHistory.length > 150) healthHistory.shift();
+            if (!redraw) return;
+            document.getElementById('health').hidden = false;
+            setText('hTemp', m.temp_c === null ? 'n/a' : m.temp_c.toFixed(0) + '°C');
+            document.getElementById('stTemp').className = 'stat ' + levelClass(m.temp_c, 60, 75);
+            setText('hCpu', m.cpu === null ? '–' : Math.round(m.cpu) + '%');
+            document.getElementById('stCpu').className = 'stat ' + levelClass(m.cpu, 60, 85);
+            setText('hCores', m.cores + ' cores');
+            const gb = b => (b / 1073741824).toFixed(1) + ' GB';
+            setText('hMem', m.mem_used === null ? '–' : gb(m.mem_used));
+            setText('hMemTotal', m.mem_total ? 'of ' + gb(m.mem_total) : '');
+            document.getElementById('stMem').className = 'stat ' + (m.mem_total ? levelClass(100 * m.mem_used / m.mem_total, 75, 90) : '');
+            setText('hClock', m.clock_mhz === null ? '–' : (m.clock_mhz / 1000).toFixed(1) + ' GHz');
+            const th = m.throttle;
+            setText('hThrottle', !th ? 'throttling: n/a' : th.now.length ? 'now: ' + th.now.join(', ')
+                : th.since_boot.length ? 'earlier: ' + th.since_boot.join(', ') : 'not throttled');
+            document.getElementById('stClock').className = 'stat ' + (!th ? '' : th.now.length ? 'bad' : th.since_boot.length ? 'warn' : 'good');
+            for (const [key, id] of [['engine', 'Engine'], ['server', 'Server'], ['browser', 'Browser']]) {
+                const v = m.parts ? m.parts[key] : null;
+                document.getElementById('p' + id).style.width = v === null ? '0' : Math.min(100, v) + '%';
+                setText('v' + id, v === null ? '–' : v.toFixed(1) + '%');
+            }
+            drawHealthChart();
         }
+        function drawHealthChart() {
+            const c = document.getElementById('healthChart');
+            const w = c.clientWidth, h = c.clientHeight, dpr = window.devicePixelRatio || 1;
+            if (!w) return;
+            if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+            const g = c.getContext('2d');
+            g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            g.clearRect(0, 0, w, h);
+            const css = getComputedStyle(document.documentElement);
+            const now = Date.now() / 1000, span = 300;
+            const line = (key, lo, hi, color) => {
+                g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
+                let started = false;
+                for (const m of healthHistory) {
+                    const v = m[key];
+                    if (v === null || v === undefined) continue;
+                    const x = w * (1 - (now - m.t) / span), y = h - 2 - (h - 4) * Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+                    if (started) g.lineTo(x, y); else { g.moveTo(x, y); started = true; }
+                }
+                g.stroke();
+            };
+            line('temp_c', 40, 85, css.getPropertyValue('--warn').trim() || 'orange');
+            line('cpu', 0, 100, css.getPropertyValue('--accent').trim() || 'steelblue');
+        }
+
+        // ---------- Pipeline status + record button ----------
+        let engineStatus = 'listening';
+        let resultFlash = null;            // { kind: 'done' | 'rejected', until: ms }
+        let recordRequestedAt = null;      // set when the Record button was pressed
+        let sawActiveSinceRecord = false;
+
+        function flashResult(kind) { resultFlash = { kind: kind, until: Date.now() + 2500 }; drawPipeline(); }
+
+        function drawPipeline() {
+            let current = engineStatus;
+            if (current === 'listening' && resultFlash && Date.now() < resultFlash.until) current = resultFlash.kind;
+            document.querySelectorAll('#pipeline .step').forEach(s => {
+                s.classList.toggle('active', s.dataset.step === current);
+            });
+            const rejected = document.querySelector('.step.rejected'), done = document.querySelector('.step.done');
+            rejected.hidden = current !== 'rejected';
+            done.hidden = current === 'rejected';
+
+            const btn = document.getElementById("recordBtn");
+            if (engineStatus !== 'listening') {
+                sawActiveSinceRecord = true;
+                btn.disabled = true;
+                btn.innerText = engineStatus === 'recording' ? '🎙️ Recording… speak now' : '⏳ Decoding…';
+            } else if (recordRequestedAt !== null && !sawActiveSinceRecord) {
+                btn.disabled = true;
+                btn.innerText = '⏳ Starting…';
+                if (Date.now() - recordRequestedAt > 8000) {
+                    updateChat("System: The wake word engine didn't respond. Is wake_word_engine.py running?");
+                    recordRequestedAt = null;
+                }
+            } else {
+                recordRequestedAt = null;
+                sawActiveSinceRecord = false;
+                btn.disabled = false;
+                btn.innerText = '🎙️ Record command';
+            }
+        }
+
+        function manualRecord() {
+            recordRequestedAt = Date.now();
+            sawActiveSinceRecord = false;
+            drawPipeline();
+            setTimeout(drawPipeline, 8100);   // shows the "engine didn't respond" warning if nothing happened
+            fetch('/manual_record', { method: 'POST' }).catch(() => {
+                updateChat("System: Failed to trigger manual record.");
+                recordRequestedAt = null;
+                drawPipeline();
+            });
+        }
+
+        let lastVoiceId = null;
+        function onVoiceResult(d) {
+            if (lastVoiceId === null) { lastVoiceId = d.id; return; }   // ignore old results on page load
+            if (d.id !== lastVoiceId) {
+                lastVoiceId = d.id;
+                handleIntent('voice', d);
+            }
+        }
+        async function pollVoiceResult() {
+            try { onVoiceResult(await (await fetch('/get_voice_result')).json()); } catch (e) {}
+        }
+
+        async function onStatus(data) {
+            engineStatus = data.status || 'listening';
+            if (data.music) applyMusic(data.music);
+            if (data.voice_id === undefined || data.voice_id !== lastVoiceId) await pollVoiceResult();
+            drawPipeline();
+        }
+
+        // The server pushes status, voice results and music changes (Server-Sent Events).
+        // If that connection drops, poll every 2 s until it is back.
+        let pollTimer = null;
+        async function pollStatus() {
+            try { await onStatus(await (await fetch('/get_status')).json()); } catch (error) {}
+            try { (await (await fetch('/metrics')).json()).forEach(m => onMetrics(m)); } catch (error) {}
+            pollTimer = setTimeout(pollStatus, 2000);
+        }
+        function connectEvents() {
+            if (!window.EventSource) { pollStatus(); return; }
+            const es = new EventSource('/events');
+            es.addEventListener('status', e => onStatus(JSON.parse(e.data)));
+            es.addEventListener('voice', e => onVoiceResult(JSON.parse(e.data)));
+            es.addEventListener('music', e => applyMusic(JSON.parse(e.data)));
+            es.addEventListener('metrics', e => onMetrics(JSON.parse(e.data)));
+            es.addEventListener('metrics_history', e => {
+                const list = JSON.parse(e.data);
+                healthHistory.length = 0;
+                list.forEach((m, i) => onMetrics(m, i === list.length - 1));
+            });
+            es.onopen = () => { clearTimeout(pollTimer); pollTimer = null; };
+            es.onerror = () => { if (pollTimer === null) pollStatus(); };
+        }
+
+        // ---------- Command list (suggestions + cheat sheet) ----------
+        const GROUP_NAMES = {
+            music_play: 'Play music', music_pause: 'Pause', music_stop: 'Stop', music_skip: 'Next song',
+            music_vol_up: 'Volume up', music_vol_down: 'Volume down', weather: 'Weather', time: 'Time',
+            toggle: 'Lights on / off', dim: 'Brightness', color: 'Light color', temp: 'Temperature',
+            timer: 'Timer', alarm: 'Alarm', reminder: 'Add reminder', get_reminders: 'List reminders',
+            call_mom: 'Call', message: 'Message'
+        };
+        // Example values for the {range} slots
+        const exampleOf = phrase => phrase
+            .replace('{16-30}', 'twenty two').replace('{0-100}', 'fifty').replace('{1-59}', 'ten')
+            .replace('seconds|minutes', 'seconds').replace('{1-12}', 'seven').replace(" [o'clock]", '').replace('am|pm', 'am');
+
+        async function loadCommandGuide() {
+            try {
+                const guide = await (await fetch('/commands')).json();
+                const groups = document.getElementById('cheatGroups');
+                const list = document.getElementById('commandSuggestions');
+                groups.innerHTML = '';
+                const order = Object.keys(GROUP_NAMES);
+                const rank = a => order.includes(a) ? order.indexOf(a) : order.length;
+                Object.keys(guide).sort((a, b) => rank(a) - rank(b)).forEach(action => {
+                    const box = document.createElement('div');
+                    const title = document.createElement('b');
+                    title.textContent = GROUP_NAMES[action] || action;
+                    box.appendChild(title);
+                    guide[action].forEach(phrase => {
+                        const b = document.createElement('button');
+                        b.textContent = phrase;
+                        b.onclick = () => { const i = document.getElementById('voiceManualInput'); i.value = exampleOf(phrase); i.focus(); };
+                        box.appendChild(b);
+                        const opt = document.createElement('option');
+                        opt.value = exampleOf(phrase);
+                        list.appendChild(opt);
+                    });
+                    groups.appendChild(box);
+                });
+            } catch (e) {
+                document.getElementById('cheatGroups').innerHTML = '<span class="muted">Command list unavailable.</span>';
+            }
+        }
+
+        // ---------- House scaling ----------
+        function fitHouse() {
+            const frame = document.getElementById('houseFrame');
+            document.getElementById('house').style.transform = `scale(${frame.clientWidth / 700})`;
+        }
+
+        // ---------- Startup ----------
+        renderLighting();   // lights on, 100%, fire
+        fitHouse();
+        new ResizeObserver(fitHouse).observe(document.getElementById('houseFrame'));
+
+        window.onload = async function() {
+            connectEvents();
+            loadCommandGuide();
+            try {
+                const response = await fetch('/get_data');
+                const data = await response.json();
+                data.alarms.forEach(alarm => addListItem('alarm-list', 'Alarm: ' + formatAlarm(alarm)));
+                data.reminders.forEach(rem => addListItem('reminder-list', rem));
+            } catch (error) {
+                console.log("No previous data found.");
+            }
+        };
     </script>
 </body>
 </html>

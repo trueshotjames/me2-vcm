@@ -33,6 +33,7 @@ INTENT_MAP = {
     "weather": "WEATHER",
     "time": "TIME",
     "call_mom": "CALL",
+    "call_dad": "CALL",
     "message": "MESSAGE",
     "get_reminders": "LIST_REMINDERS",
     "timer": "TIMER",
@@ -45,16 +46,19 @@ INTENT_MAP = {
 }
 
 
-# 2. Toggle state tracker. intent_parser collapses both "lights on" and
-#    "lights out" into the single action 'toggle'; this module-level flag
-#    disambiguates them into LIGHT_ON / LIGHT_OFF without touching
-#    intent_parser.py.
+# 2. Toggle state tracker. intent_parser maps both "lights on" and
+#    "lights out" to the action 'toggle', with value "on" or "off".
+#    The value decides LIGHT_ON / LIGHT_OFF; without one, this module-level
+#    flag alternates between them.
 _light_on = False
 
 
-def _resolve_toggle():
-    """Return the next toggle intent and advance the tracker."""
+def _resolve_toggle(value=None):
+    """Return the toggle intent ("on"/"off" value first, else alternate) and update the tracker."""
     global _light_on
+    if value in ("on", "off"):
+        _light_on = value == "on"
+        return "LIGHT_ON" if _light_on else "LIGHT_OFF"
     if not _light_on:
         _light_on = True
         return "LIGHT_ON"
@@ -99,7 +103,7 @@ def log_benchmark_result(transcribed_text, infer_ms, audio_ms=5000):
     action, value = parse_text(transcribed_text)
 
     if action == "toggle":
-        intent = _resolve_toggle()
+        intent = _resolve_toggle(value)
     else:
         intent = INTENT_MAP.get(action, "OUT_OF_SCOPE")
 
