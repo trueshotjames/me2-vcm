@@ -8,6 +8,3 @@ reminders.xlsx
 manual_trigger.txt
 vcm_debug_clip_*.wav
 
-# Your own music (keep the folder)
-playlist/*
-!playlist/.gitkeep

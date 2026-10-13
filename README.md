@@ -125,7 +125,7 @@ me2-vcm/
 ├── sounds/
 │   ├── beep.mp3                   Played when the wake word is heard
 │   └── call_ringtone.mp3          Played by the call popup
-├── playlist/                      Put your own .mp3 files here for the music commands
+├── playlist/                      Demo songs (.mp3) for the music commands; add or swap your own
 └── screenshots/                   Images used in this README
 ```
 
@@ -183,7 +183,7 @@ source .venv/bin/activate
 pip install flask openpyxl requests python-vlc numpy scipy sounddevice soundfile onnxruntime
 ```
 
-Copy a few `.mp3` files into `playlist/` if you want the music commands to play something.
+`playlist/` comes with three demo songs. Add or replace `.mp3` files there to change what the music commands play.
 
 ### 4. Check the microphone and speaker
 
