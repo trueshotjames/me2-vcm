@@ -291,6 +291,7 @@ A menu asks which model to train (voice command model, wake word model or both),
 | `--dry-run` | Show the plan and which stages are already done; download or run nothing |
 | `--from STAGE`, `--only STAGE` | Start at a stage, or run just one |
 | `--force` | Rerun stages even if their output exists |
+| `--no-download` | Never use the network: if data is missing, stop with a list of the missing files instead of downloading |
 | `--gpus 2,5`, `--epochs`, `--workers` … | Override the CONFIG values; other options go straight to `train.py` |
 
 Stages, in order (each is skipped when its output already exists, so a stopped run can simply be restarted):
@@ -320,7 +321,7 @@ The archive is 45.6 GB, but the script streams it and keeps only the `ENG` folde
 
 ### On the course GPU cluster
 
-Everything, including the Philippine Languages Database, is already in place on the cluster:
+Everything, including the Philippine Languages Database, is already in place on the cluster, so the download stages are skipped and the cluster's missing internet access does not matter:
 
 ```bash
 cd "/home/king.james.villasin/sandbox/Machine Exercise 2"
