@@ -5,9 +5,11 @@
     python run_train_pipeline.py --dry-run        # show the plan and what is already done
     python run_train_pipeline.py --from preprocess --yes
     python run_train_pipeline.py --only train --gpus 3
+    python run_train_pipeline.py --no-download    # never use the network (e.g. an offline GPU cluster)
 
 Edit the CONFIG block below to change training settings and GPUs.
-Stages are skipped when their outputs already exist (--force reruns them).
+Stages are skipped when their outputs already exist (--force reruns them), so on
+a machine that already has the data nothing is downloaded and no network is used.
 Options not listed in --help are passed straight to train.py (e.g. --lr 0.001).
 
 Needs: pip install huggingface_hub, plus training_env/requirements.txt.
@@ -64,6 +66,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
@@ -86,15 +89,17 @@ CACHE_META = os.path.join(DATASET, "cache", "cache_meta.json")
 ME2_FOLDERS = ["data", "supplemental_fil", "supplemental_synth", "synthetic_negatives"]
 SPLIT_CSVS = ["integrated_train_data.csv", "integrated_test_data.csv", "integrated_holdout_data.csv"]
 CODE_FILES = ["train.py", "preprocess.py", "augment.py", "features.py", "model.py", "dataset_loader.py",
-              "export_onnx.py", "vocab.txt", "dataset/ai231-me2-voice-commands/build_me2_csv.py",
-              "dataset/ai231-me2-voice-commands/trim_long_clips.py"] + [f"dataset/{c}" for c in SPLIT_CSVS]
+              "export_onnx.py", "vocab.txt"] + [f"dataset/{c}" for c in SPLIT_CSVS]
+ME2_SCRIPTS = ["dataset/ai231-me2-voice-commands/build_me2_csv.py",   # only needed to extract the ME2 audio
+               "dataset/ai231-me2-voice-commands/trim_long_clips.py"]
 
 
 # ----------------------------------------------------------------- helpers --
 def run(cmd, cwd):
     """Run a command, streaming its output. Stops the pipeline if it fails."""
     print(f"  $ (cd {os.path.relpath(cwd, ROOT) or '.'}) {' '.join(cmd)}", flush=True)
-    result = subprocess.run(cmd, cwd=cwd)
+    env = dict(os.environ, HF_HUB_OFFLINE="1")   # the training steps never need the network
+    result = subprocess.run(cmd, cwd=cwd, env=env)
     if result.returncode != 0:
         sys.exit(f"\nStopped: command failed with exit code {result.returncode}.")
 
@@ -284,8 +289,13 @@ def extract_eng_from_zip(fileobj, dest):
 
 
 # --------------------------------------------------------------- VCM stages --
+def code_missing():
+    files = CODE_FILES + ([] if me2_audio_done() else ME2_SCRIPTS)
+    return [f for f in files if not os.path.exists(os.path.join(VCM_DIR, *f.split("/")))]
+
+
 def fetch_code_done():
-    return all(os.path.exists(os.path.join(VCM_DIR, *f.split("/"))) for f in CODE_FILES)
+    return not code_missing()
 
 
 def fetch_code(args):
@@ -297,8 +307,13 @@ def fetch_code(args):
                       allow_patterns=["training_env/**"], local_dir=ROOT)
 
 
+def me2_audio_done():
+    """Every ME2 clip the split CSVs use is already a wav file (then the parquet files are not needed)."""
+    return bool(csv_paths()) and not missing_files("ai231-me2-voice-commands/")
+
+
 def fetch_me2_done():
-    return all(glob.glob(os.path.join(ME2_DIR, folder, "*.parquet")) for folder in ME2_FOLDERS)
+    return me2_audio_done() or all(glob.glob(os.path.join(ME2_DIR, folder, "*.parquet")) for folder in ME2_FOLDERS)
 
 
 def fetch_me2(args):
@@ -308,8 +323,7 @@ def fetch_me2(args):
 
 
 def unpack_me2_done():
-    return (os.path.exists(os.path.join(DATASET, "ai231_me2_data.csv"))
-            and not missing_files("ai231-me2-voice-commands/"))
+    return me2_audio_done()
 
 
 def unpack_me2(args):
@@ -509,6 +523,46 @@ def install(args):
         print(f"  copied {os.path.relpath(src, ROOT)} -> models/{name}")
 
 
+def stage_missing(name):
+    """What a download stage still needs (for --no-download / offline messages)."""
+    if name == "fetch_code":
+        return [f"training_env/{f}" for f in code_missing()]
+    if name == "fetch_me2":
+        return [f"training_env/dataset/ai231-me2-voice-commands/{f}/*.parquet" for f in ME2_FOLDERS]
+    if name == "musan":
+        return ["training_env/dataset/musan-noise-dataset/musan/noise/ and music/"]
+    if name == "pld":
+        return [f"training_env/dataset/{p}" for p in missing_files("philippine-language-database/")]
+    return []
+
+
+NETWORK = {"fetch_code": "huggingface.co", "fetch_me2": "huggingface.co",
+           "musan": "www.openslr.org", "pld": "mozilladatacollective.com"}
+
+
+def online(host, timeout=5):
+    try:
+        socket.create_connection((host, 443), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def need_download(name, args):
+    """Called before a download stage runs: stop at once if it may not or cannot use the network."""
+    missing = stage_missing(name)
+    shown = "\n".join(f"    {m}" for m in missing[:10])
+    if len(missing) > 10:
+        shown += f"\n    ... and {len(missing) - 10} more"
+    if args.no_download:
+        sys.exit(f"\nStopped: --no-download, but stage '{name}' is missing:\n{shown}\n"
+                 "Copy these files here (same paths under this folder), then rerun.")
+    if not online(NETWORK[name]):
+        sys.exit(f"\nStopped: stage '{name}' needs to download, but {NETWORK[name]} cannot be reached "
+                 f"(no internet on this machine?). Missing:\n{shown}\n"
+                 "Copy these files here from a machine that has them (same paths), or run where there is internet.")
+
+
 # (name, what it does, done check, action)
 VCM_STAGES = [
     ("fetch_code", "training_env code, split CSVs, Common Voice clips (HF)", fetch_code_done, fetch_code),
@@ -541,6 +595,8 @@ def get_args():
     p.add_argument("--dry-run", action="store_true", help="show the plan; download or run nothing")
     p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     p.add_argument("--force", action="store_true", help="rerun stages even if they look done")
+    p.add_argument("--no-download", action="store_true",
+                   help="never use the network; stop with a list of missing files instead")
     p.add_argument("--workers", type=int, default=VCM["workers"] or os.cpu_count())
     p.add_argument("--k", type=int, default=VCM["k"])
     p.add_argument("--gpus", default=VCM["gpus"])
@@ -584,7 +640,7 @@ def select(stages, args):
 
 
 def show_plan(model, stages, args):
-    print(f"\n=== {model} pipeline ===")
+    print(f"\n=== {model} pipeline ===" + (" (no-download mode)" if args.no_download else ""))
     if not stages:
         print("wake word pipeline not added yet")
     for name, desc, done, _ in stages:
@@ -604,6 +660,8 @@ def run_stages(model, stages, args):
             skipped.append(name)
             continue
         print(f"\n[run]  {name}: {desc}", flush=True)
+        if name in NETWORK:
+            need_download(name, args)
         t0 = time.time()
         action(args)
         print(f"[ok]   {name} ({time.time() - t0:.0f} s)")
