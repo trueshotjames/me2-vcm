@@ -13,9 +13,10 @@ An offline voice assistant for a **Raspberry Pi 4 (4 GB RAM)**. You say **"Alexa
 3. [Model performance](#3-model-performance)
 4. [Running it on a Raspberry Pi 4](#4-running-it-on-a-raspberry-pi-4)
 5. [The deep learning models](#5-the-deep-learning-models)
-6. [Voice command model: data and training](#6-voice-command-model-data-and-training)
-7. [Wake word model: data and training](#7-wake-word-model-data-and-training)
-8. [References](#8-references)
+6. [Reproducing the training](#6-reproducing-the-training)
+7. [Voice command model: data and training](#7-voice-command-model-data-and-training)
+8. [Wake word model: data and training](#8-wake-word-model-data-and-training)
+9. [References](#9-references)
 
 ---
 
@@ -97,7 +98,7 @@ Small words such as *the, a, to, for, my* are optional. Previous song and an exa
 
 ## 2. Project structure
 
-Only the files needed to run the webpage and the voice pipeline are in this repository. The training folders (`training_env/` for the voice command model, `training_env_wake/` for the wake word model) and the datasets stay on the GPU cluster; sections 6 and 7 describe them.
+Only the files needed to run the webpage and the voice pipeline are in this repository, plus `run_train_pipeline.py`. The training folders (`training_env/` for the voice command model, `training_env_wake/` for the wake word model) and the datasets are not; `run_train_pipeline.py` downloads them (section 6). Sections 7 and 8 describe the data and training.
 
 ```
 me2-vcm/
@@ -114,6 +115,9 @@ me2-vcm/
 ├── .gitattributes                 Keeps CRLF line endings for .bat files and LF for .sh files
 ├── requirements.txt               Python packages for .venv
 ├── CHANGE.md                      Log of fixes and the steps they need from you
+├── run_train_pipeline.py         One command for the whole training pipeline: downloads the code
+│                                  and data, preprocesses, trains, exports and copies the model to
+│                                  models/ (section 6)
 ├── voice_pipeline/
 │   ├── wake_word_engine.py        Always-on microphone loop: wake word detection, beep, streaming
 │   │                              VCM decoding, end-of-command detection, posts results to Flask
@@ -248,13 +252,83 @@ On current Raspberry Pi OS the browser command is `chromium` (older releases cal
 | Loss | Binary cross-entropy | CTC |
 | Pi format | ONNX, int8 dynamic quantization, 58 KB | ONNX, fp32, CMVN folded into the graph, 3.8 MB |
 
-**Wake word model.** A strided 1-D convolution (40 filters, kernel 256, stride 160, so one frame per 10 ms) learns its own filterbank from the raw waveform. Three depthwise-separable blocks (40 → 64 → 100 → 128 channels, kernels 5, 5, 3, each with batch norm, ReLU and 15 % dropout) follow, then global average pooling and a linear layer with a sigmoid. The design follows the DS-CNN keyword spotters of Zhang et al. [[25]](#ref25). Datasets, preprocessing, augmentation and training details are in [section 7](#7-wake-word-model-data-and-training).
+**Wake word model.** A strided 1-D convolution (40 filters, kernel 256, stride 160, so one frame per 10 ms) learns its own filterbank from the raw waveform. Three depthwise-separable blocks (40 → 64 → 100 → 128 channels, kernels 5, 5, 3, each with batch norm, ReLU and 15 % dropout) follow, then global average pooling and a linear layer with a sigmoid. The design follows the DS-CNN keyword spotters of Zhang et al. [[25]](#ref25). Datasets, preprocessing, augmentation and training details are in [section 8](#8-wake-word-model-data-and-training).
 
-**Voice command model.** The model is causal: every output step only looks at past audio, so the Pi can decode while you are still speaking. A stride-2 convolution and a stride-2 depthwise-separable convolution reduce 10 ms frames to 40 ms steps, two more separable convolutions follow, then five residual blocks with dilations 1, 2, 4, 1 and 2 widen the receptive field to about 1.9 s. All layers use 256 channels and 10 % dropout. The per-band mean and standard deviation from the training set are stored inside the model, so the exported ONNX graph normalises its own input and the Pi only computes the log-Mel features. `features.py` is the same NumPy code in training and on the Pi. Datasets, preprocessing, augmentation and training details are in [section 6](#6-voice-command-model-data-and-training).
+**Voice command model.** The model is causal: every output step only looks at past audio, so the Pi can decode while you are still speaking. A stride-2 convolution and a stride-2 depthwise-separable convolution reduce 10 ms frames to 40 ms steps, two more separable convolutions follow, then five residual blocks with dilations 1, 2, 4, 1 and 2 widen the receptive field to about 1.9 s. All layers use 256 channels and 10 % dropout. The per-band mean and standard deviation from the training set are stored inside the model, so the exported ONNX graph normalises its own input and the Pi only computes the log-Mel features. `features.py` is the same NumPy code in training and on the Pi. Datasets, preprocessing, augmentation and training details are in [section 7](#7-voice-command-model-data-and-training).
 
 ---
 
-## 6. Voice command model: data and training
+## 6. Reproducing the training
+
+One command sets up the data, preprocesses, trains, exports and copies the new model into `models/`. The training code, the frozen train / test / holdout splits and the Common Voice clips are published on Hugging Face: [trueshotjames/ai231-king-me2](https://huggingface.co/datasets/trueshotjames/ai231-king-me2) (tag `v0.1-vcm`). Only the voice command model is available so far; the wake word pipeline is being added.
+
+### What you need
+
+- A Linux machine with an NVIDIA GPU, an internet connection and plenty of free disk (MUSAN alone is 12 GB, the ME2 wav files about 7 GB, plus the feature cache).
+- Python 3, `ffmpeg` on the PATH, and the training packages:
+
+  ```bash
+  pip install huggingface_hub
+  python run_train_pipeline.py --model vcm --only fetch_code
+  pip install -r training_env/requirements.txt pyarrow
+  ```
+
+- A free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database (see below).
+
+### Run it
+
+```bash
+python run_train_pipeline.py
+```
+
+A menu asks which model to train (voice command model, wake word model or both), shows the plan, and asks before it starts. Training settings and GPU numbers are in the `CONFIG` block at the top of `run_train_pipeline.py`.
+
+| Option | What it does |
+|---|---|
+| `--model vcm` / `wake` / `all` | Skip the menu (for `nohup` or cluster jobs) |
+| `--yes` | Do not ask before starting |
+| `--dry-run` | Show the plan and which stages are already done; download or run nothing |
+| `--from STAGE`, `--only STAGE` | Start at a stage, or run just one |
+| `--force` | Rerun stages even if their output exists |
+| `--gpus 2,5`, `--epochs`, `--workers` … | Override the CONFIG values; other options go straight to `train.py` |
+
+Stages, in order (each is skipped when its output already exists, so a stopped run can simply be restarted):
+
+| Stage | What it does |
+|---|---|
+| `fetch_code` | Downloads `training_env/` from Hugging Face |
+| `fetch_me2` | Downloads the AI231 ME2 Voice Commands parquet files [[1]](#ref1) at the commit the splits were built from |
+| `unpack_me2` | Trims clips over 5 s and writes every clip as a wav file |
+| `musan` | Downloads MUSAN [[14]](#ref14) from OpenSLR (about 11 GB) |
+| `pld` | Downloads the English part of the Philippine Languages Database [[11]](#ref11) |
+| `pop_songs` | Optional: the demo playlist used as background music. It is not published; without it, MUSAN music is used instead |
+| `build_csv` | The integrated splits are frozen; rebuilt only with `--force` |
+| `verify` | Stops if any clip in the splits is missing |
+| `preprocess`, `train`, `export` | `preprocess.py`, `train.py`, `export_onnx.py` (section 7) |
+| `install` | Copies `voice_command_model.onnx` and `vocab.txt` into `models/` |
+
+### The Philippine Languages Database
+
+Its terms do not allow redistribution, so each user downloads it with their own account:
+
+1. Log in at the [dataset page](https://mozilladatacollective.com/datasets/cmmxhw46c00tqnw07xyr94zjk) and accept the terms.
+2. Create an API key in your profile settings.
+3. Paste the key when `run_train_pipeline.py` asks for it, or set it first with `export MDC_API_KEY=...`. The key is not stored.
+
+The archive is 45.6 GB, but the script streams it and keeps only the `ENG` folder. It stops once that folder has been read.
+
+### On the course GPU cluster
+
+Everything, including the Philippine Languages Database, is already in place on the cluster:
+
+```bash
+cd "/home/king.james.villasin/sandbox/Machine Exercise 2"
+python run_train_pipeline.py --model vcm --yes
+```
+
+---
+
+## 7. Voice command model: data and training
 
 ### Datasets
 
@@ -304,10 +378,7 @@ How the splits are made:
 | Room reverb | 50 % of copies, synthetic impulse response, RT60 0.2 to 0.8 s | Small rooms |
 | Background | 80 % of copies: MUSAN noise at 0 to 20 dB SNR (60 %) or music (40 %, half of it pop songs like the demo playlist) at low, medium or high volume | The Pi plays music while it listens |
 | Gain | −20 to +20 dB | Near and far speakers, mic levels |
-| Number splicing | Swaps the number in timer, alarm, temperature and brightness commands for another value (0 to 100, hours 1 to 12), and appends a number to 30 % of other commands | The recordings use only a few example values; this teaches every number |
 | SpecAugment [[24]](#ref24) | 2 frequency masks (up to 8 bands) and 2 time masks (up to 200 ms), drawn fresh every batch on the GPU | Robustness to missing bands and short dropouts |
-
-Number positions for splicing come from forced alignment with the MMS aligner [[12]](#ref12) (`align_numbers.py`).
 
 ### Training
 
@@ -321,9 +392,9 @@ Number positions for splicing come from forced alignment with the MMS aligner [[
 | Model selection | Best token F1 on the test split, with early stopping |
 | Result | Best epoch 309 of 459, F1 0.894 |
 
+`run_train_pipeline.py` runs these steps (section 6). By hand, from `training_env/`:
+
 ```bash
-cd training_env
-python align_numbers.py
 python preprocess.py --workers 32
 python train.py --gpus 2,5 --epochs 300 --patience 30 --min_epochs 60 --fresh
 python export_onnx.py
@@ -333,7 +404,9 @@ python export_onnx.py
 
 ---
 
-## 7. Wake word model: data and training
+## 8. Wake word model: data and training
+
+This describes the deployed wake word model. A new wake word pipeline is being added to `run_train_pipeline.py`; until then, option 2 of its menu is not available.
 
 ### Datasets
 
@@ -362,7 +435,7 @@ On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and sco
 
 ---
 
-## 8. References
+## 9. References
 
 **Voice command datasets**
 
@@ -380,7 +453,7 @@ On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and sco
 
 **Noise, voices and tools used to build the data**
 
-12. <a id="ref12"></a>Pratap, V., et al. (2024). Scaling speech technology to 1,000+ languages (MMS). *JMLR* 25(97). https://jmlr.org/papers/v25/23-1318.html (forced aligner used for number splicing)
+12. <a id="ref12"></a>Pratap, V., et al. (2024). Scaling speech technology to 1,000+ languages (MMS). *JMLR* 25(97). https://jmlr.org/papers/v25/23-1318.html (forced aligner)
 13. <a id="ref13"></a>Panayotov, V., Chen, G., Povey, D., & Khudanpur, S. (2015). LibriSpeech: An ASR corpus based on public domain audio books. *ICASSP 2015*. DOI: [10.1109/ICASSP.2015.7178964](https://doi.org/10.1109/ICASSP.2015.7178964). https://www.openslr.org/12/
 14. <a id="ref14"></a>Snyder, D., Chen, G., & Povey, D. (2015). MUSAN: A music, speech, and noise corpus. arXiv:1510.08484. DOI: [10.48550/arXiv.1510.08484](https://doi.org/10.48550/arXiv.1510.08484). https://www.openslr.org/17/
 15. <a id="ref15"></a>Du, Z., et al. (2024). CosyVoice 2: Scalable streaming speech synthesis with large language models. arXiv:2412.10117. DOI: [10.48550/arXiv.2412.10117](https://doi.org/10.48550/arXiv.2412.10117)
