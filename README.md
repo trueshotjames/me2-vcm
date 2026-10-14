@@ -17,6 +17,7 @@ An offline voice assistant for a **Raspberry Pi 4 (4 GB RAM)**. You say **"Alexa
 7. [Voice command model: data and training](#7-voice-command-model-data-and-training)
 8. [Wake word model: data and training](#8-wake-word-model-data-and-training)
 9. [References](#9-references)
+10. [License](#10-license)
 
 ---
 
@@ -384,7 +385,10 @@ How the splits are made:
 
 | Setting | Value |
 |---|---|
-| Hardware | 2 × NVIDIA GPUs on the DGX cluster, PyTorch DDP, bf16 |
+| Hardware | 2 × NVIDIA A100-SXM4-40GB (GPUs 6 and 7 of DGX node `n002`), PyTorch DDP, bf16 |
+| Run | 12 October 2026: epochs 1 to 271 (early stop), then resumed from the epoch 271 checkpoint for epochs 272 to 459 |
+| Wall-clock | About 1 h 51 min in total: preprocessing about 6 min, epochs 1 to 271 1 h 06 min, epochs 272 to 459 39 min (sum of the per-epoch times in the log, 12 to 15 s each); about 3.5 A100-hours |
+| Seed | 1234 (the default of `train.py` and `preprocess.py`; the run did not override it) |
 | Batch | 256 clips per GPU |
 | Optimiser | AdamW, weight decay 1e-4, peak learning rate 0.002 × √(GPUs) = 0.00283 |
 | Schedule | One-cycle (SGDR warm restarts also available) |
@@ -401,6 +405,10 @@ python export_onnx.py
 ```
 
 `export_onnx.py` writes the ONNX model and checks that it gives the same output as PyTorch.
+
+The seed fixes the weight initialisation, the batch order of every epoch (`seed + epoch`) and the augmentation of every clip (`seed`, row id). Runs are close but not bit-identical, because `cudnn.benchmark`, TF32 and DDP gradient reduction are not deterministic. Pass `--seed N` to `train.py` and `preprocess.py` to change it.
+
+The logs of this run (`vcm_train.log`, `vcm_training_results.txt`) are in [`training_env/logs/`](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/tree/main/training_env/logs) on Hugging Face. The trained weights (ONNX and PyTorch checkpoint) are attached to the [`v0.1-vcm` release](https://github.com/trueshotjames/me2-vcm/releases/tag/v0.1-vcm).
 
 ---
 
@@ -473,3 +481,11 @@ On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and sco
 23. <a id="ref23"></a>Graves, A., Fernández, S., Gomez, F., & Schmidhuber, J. (2006). Connectionist temporal classification. *ICML 2006*. DOI: [10.1145/1143844.1143891](https://doi.org/10.1145/1143844.1143891)
 24. <a id="ref24"></a>Park, D. S., et al. (2019). SpecAugment: A simple data augmentation method for automatic speech recognition. *Interspeech 2019*. DOI: [10.21437/Interspeech.2019-2680](https://doi.org/10.21437/Interspeech.2019-2680)
 25. <a id="ref25"></a>Zhang, Y., Suda, N., Lai, L., & Chandra, V. (2017). Hello Edge: Keyword spotting on microcontrollers. arXiv:1711.07128. DOI: [10.48550/arXiv.1711.07128](https://doi.org/10.48550/arXiv.1711.07128)
+
+---
+
+## 10. License
+
+The code in this repository is under the [MIT License](LICENSE).
+
+The trained models (`models/*.onnx` and the weights in the [releases](https://github.com/trueshotjames/me2-vcm/releases)) are under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), because their training data includes non-commercial and research-only sources (section 7). The training code and data splits on [Hugging Face](https://huggingface.co/datasets/trueshotjames/ai231-king-me2) are CC BY-NC 4.0, with per-source terms in its `LICENSE.md`. The demo songs in `playlist/` belong to their artists and are not covered by either license.
