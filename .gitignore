@@ -8,3 +8,7 @@ reminders.xlsx
 manual_trigger.txt
 vcm_debug_clip_*.wav
 
+
+# Training pipeline (run_train_pipeline.py downloads these)
+training_env/
+training_env_wake/
