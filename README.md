@@ -478,7 +478,7 @@ python -u train.py --gpus 0,6 --fresh --out_dir train_logs --epochs 500 --min_ep
   --batches 256 --lr 0.002 --seed 1234 --ckpt_every 500
 ```
 
-`train.py` exports `train_logs/wake_word_model_quantized.onnx` at the end. The cluster guide with every step is `training_env_wake/WAKE_TRAINING_STEPS.md`.
+`train.py` exports `train_logs/wake_word_model_quantized.onnx` at the end. The cluster guide with every step (tmux, logs, resume, troubleshooting) is in [`training_env_wake/README.md`](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/blob/main/training_env_wake/README.md) on Hugging Face.
 
 The logs of this run (`wake_train.log`, `wake_training_results.txt`, `wake_results.json`, `wake_preprocess_report.txt`) are in [`training_env_wake/logs/`](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/tree/v1.0/training_env_wake/logs) on Hugging Face. The weights (int8 ONNX and PyTorch checkpoint) are attached to the [`v1.0` release](https://github.com/trueshotjames/me2-vcm/releases/tag/v1.0).
 
