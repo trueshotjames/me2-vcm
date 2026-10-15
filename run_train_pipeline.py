@@ -2,6 +2,7 @@
 
     python run_train_pipeline.py                  # menu: pick VCM, wake word or both
     python run_train_pipeline.py --model vcm      # no menu (for nohup / cluster jobs)
+    python run_train_pipeline.py --model wake --yes
     python run_train_pipeline.py --dry-run        # show the plan and what is already done
     python run_train_pipeline.py --from preprocess --yes
     python run_train_pipeline.py --only train --gpus 3
@@ -11,6 +12,8 @@ Edit the CONFIG block below to change training settings and GPUs.
 Stages are skipped when their outputs already exist (--force reruns them), so on
 a machine that already has the data nothing is downloaded and no network is used.
 Options not listed in --help are passed straight to train.py (e.g. --lr 0.001).
+--gpus, --epochs, --patience, --min_epochs and --workers override the CONFIG block of
+the model(s) being run.
 
 Needs: pip install huggingface_hub, plus training_env/requirements.txt.
 PLD (Philippine Languages Database) is not re-hosted; it is downloaded with
@@ -20,7 +23,7 @@ your own Mozilla Data Collective API key (env MDC_API_KEY, or typed in).
 # ============================================================== CONFIG ==
 # Where the training code, split CSVs and Common Voice clips are published.
 HF_REPO = "trueshotjames/ai231-king-me2"
-HF_REVISION = "v0.1-vcm"                    # tag or commit
+HF_REVISION = "v1.0"                        # tag or commit (v0.1-vcm = VCM only)
 # Class dataset with the ME2 audio (parquet), pinned to the commit the CSVs were built from.
 ME2_REPO = "airimonda/ai231-me2-voice-commands"
 ME2_REVISION = "bfca0bbebfe17e00d6a685d1da573615d29ecdce"
@@ -37,11 +40,15 @@ VCM = dict(
     extra_args=[],         # more train.py options, e.g. ["--lr", "0.001"]
 )
 
-# Wake word model: not added yet.
+# Wake word model (training_env_wake/). Same keys; values used for the released model.
 WAKE = dict(
-    gpus="0",
-    workers=None,
-    extra_args=[],
+    gpus="all",
+    epochs=500,
+    patience=50,
+    min_epochs=50,
+    workers=32,            # CPU workers for preprocessing; None = all cores
+    resume=False,          # True = continue from train_logs/last_checkpoint.pt instead of --fresh
+    extra_args=["--batches", "256", "--lr", "0.002", "--seed", "1234"],
 )
 
 # PLD from Mozilla Data Collective (only the ENG folder is kept).
@@ -86,6 +93,15 @@ MODELS_DIR = os.path.join(ROOT, "models")
 STATE_DIR = os.path.join(VCM_DIR, ".pipeline")    # marker files for train / export
 CACHE_META = os.path.join(DATASET, "cache", "cache_meta.json")
 
+WAKE_DIR = os.path.join(ROOT, "training_env_wake")
+WAKE_DATASET = os.path.join(WAKE_DIR, "dataset")
+WAKE_OUT = os.path.join(WAKE_DIR, "train_logs")
+WAKE_STATE = os.path.join(WAKE_DIR, ".pipeline")
+WAKE_CSVS = ["wake_train_data.csv", "wake_val_data.csv"]
+WAKE_CODE_FILES = ["train.py", "preprocess.py", "model.py", "dataset_loader.py", "export_onnx.py",
+                   "requirements.txt"] + [f"dataset/{c}" for c in WAKE_CSVS]
+WAKE_AUDIO = ["Alexa", "speech-noise-dataset"]   # top folders of the clips, under dataset/
+
 ME2_FOLDERS = ["data", "supplemental_fil", "supplemental_synth", "synthetic_negatives"]
 SPLIT_CSVS = ["integrated_train_data.csv", "integrated_test_data.csv", "integrated_holdout_data.csv"]
 CODE_FILES = ["train.py", "preprocess.py", "augment.py", "features.py", "model.py", "dataset_loader.py",
@@ -121,9 +137,9 @@ def missing_files(prefix=None):
     return [p for p in paths if not os.path.exists(os.path.join(DATASET, *p.split("/")))]
 
 
-def mark(name):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(os.path.join(STATE_DIR, name), "w") as f:
+def mark(name, state_dir=STATE_DIR):
+    os.makedirs(state_dir, exist_ok=True)
+    with open(os.path.join(state_dir, name), "w") as f:
         f.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
 
 
@@ -487,7 +503,7 @@ def train(args):
            "--workers", str(args.workers), "--k", str(args.k)]
     if not args.resume:
         cmd.append("--fresh")
-    run(cmd + VCM["extra_args"] + args.train_args, VCM_DIR)
+    run(cmd + args.extra_args + args.train_args, VCM_DIR)
     mark("train.done")
 
 
@@ -523,8 +539,128 @@ def install(args):
         print(f"  copied {os.path.relpath(src, ROOT)} -> models/{name}")
 
 
+# ---------------------------------------------------------- wake stages --
+# The wake word clips (SynTTS "Alexa" clips, Speech Noise Dataset) are on HF next to the code,
+# so on a machine that already has training_env_wake/dataset/ (e.g. the cluster) nothing is downloaded.
+def wake_code_missing():
+    return [f for f in WAKE_CODE_FILES if not os.path.exists(os.path.join(WAKE_DIR, *f.split("/")))]
+
+
+def wake_paths():
+    """Every clip in the wake CSVs (relative to training_env_wake/dataset)."""
+    paths = []
+    for name in WAKE_CSVS:
+        path = os.path.join(WAKE_DATASET, name)
+        if os.path.exists(path):
+            with open(path, newline="", encoding="utf-8") as f:
+                paths += [row["path"].strip().replace("\\", "/") for row in csv.DictReader(f)]
+    return paths
+
+
+def wake_missing():
+    return [p for p in wake_paths() if not os.path.exists(os.path.join(WAKE_DATASET, *p.split("/")))]
+
+
+def fetch_wake_code_done():
+    return not wake_code_missing()
+
+
+def fetch_wake_code(args):
+    from huggingface_hub import snapshot_download
+    print(f"  downloading training_env_wake/ code and CSVs from {HF_REPO} @ {HF_REVISION}")
+    snapshot_download(HF_REPO, repo_type="dataset", revision=HF_REVISION, local_dir=ROOT,
+                      allow_patterns=["training_env_wake/*.py", "training_env_wake/*.txt",
+                                      "training_env_wake/*.md", "training_env_wake/dataset/*.csv",
+                                      "training_env_wake/dataset/*.py"])
+
+
+def fetch_wake_audio_done():
+    return bool(wake_paths()) and not wake_missing()
+
+
+def fetch_wake_audio(args):
+    from huggingface_hub import snapshot_download
+    print(f"  downloading the wake word clips (~1.4 GB) from {HF_REPO} @ {HF_REVISION}")
+    snapshot_download(HF_REPO, repo_type="dataset", revision=HF_REVISION, local_dir=ROOT,
+                      allow_patterns=[f"training_env_wake/dataset/{d}/**" for d in WAKE_AUDIO])
+
+
+def wake_verify(args):
+    paths, missing = wake_paths(), wake_missing()
+    print(f"  {len(paths) - len(missing)} ok, {len(missing)} missing (of {len(paths)} clips in the wake CSVs)")
+    if missing:
+        for p in missing[:10]:
+            print(f"    missing: {p}")
+        sys.exit("\nStopped: some wake word clips are missing.")
+
+
+def wake_preprocess_done():
+    check = "import sys, preprocess; sys.exit(0 if preprocess.cache_ready() else 1)"
+    try:
+        return subprocess.run([sys.executable, "-c", check], cwd=WAKE_DIR,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except OSError:
+        return False
+
+
+def wake_preprocess(args):
+    cmd = [sys.executable, "-u", "preprocess.py", "--workers", str(args.workers)]
+    if args.force:
+        cmd.append("--force")
+    run(cmd, WAKE_DIR)
+
+
+def wake_train_done():
+    marker = os.path.join(WAKE_STATE, "train.done")
+    return newer(marker, os.path.join(WAKE_DATASET, "cache", "cache_meta.json")) and os.path.exists(
+        os.path.join(WAKE_OUT, "best_model.pth"))
+
+
+def wake_train(args):
+    # train.py writes train_logs/ (checkpoints, training_results.txt, results.json) and exports the ONNX.
+    cmd = [sys.executable, "-u", "train.py", "--gpus", args.gpus, "--out_dir", "train_logs",
+           "--epochs", str(args.epochs), "--patience", str(args.patience),
+           "--min_epochs", str(args.min_epochs), "--workers", str(args.workers)]
+    if not args.resume:
+        cmd.append("--fresh")
+    run(cmd + args.extra_args + args.train_args, WAKE_DIR)
+    mark("train.done", WAKE_STATE)
+
+
+def wake_export_done():
+    return newer(os.path.join(WAKE_OUT, "wake_word_model_quantized.onnx"), os.path.join(WAKE_OUT, "best_model.pth"))
+
+
+def wake_export(args):
+    run([sys.executable, "-u", "export_onnx.py", "--ckpt", "train_logs/best_model.pth", "--out-dir", "train_logs"],
+        WAKE_DIR)
+
+
+def wake_install_done():
+    src = os.path.join(WAKE_OUT, "wake_word_model_quantized.onnx")
+    dst = os.path.join(MODELS_DIR, "wake_word_model_quantized.onnx")
+    return os.path.exists(src) and os.path.exists(dst) and md5(src) == md5(dst)
+
+
+def wake_install(args):
+    # voice_pipeline/wake_word_engine.py loads models/wake_word_model_quantized.onnx.
+    src = os.path.join(WAKE_OUT, "wake_word_model_quantized.onnx")
+    dst = os.path.join(MODELS_DIR, "wake_word_model_quantized.onnx")
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    if os.path.exists(dst):
+        backup = dst + time.strftime(".%Y%m%d_%H%M%S.bak")
+        shutil.copy2(dst, backup)
+        print(f"  backed up the old model to models/{os.path.basename(backup)}")
+    shutil.copy2(src, dst)
+    print(f"  copied {os.path.relpath(src, ROOT)} -> models/wake_word_model_quantized.onnx")
+
+
 def stage_missing(name):
     """What a download stage still needs (for --no-download / offline messages)."""
+    if name == "fetch_wake_code":
+        return [f"training_env_wake/{f}" for f in wake_code_missing()]
+    if name == "fetch_wake_audio":
+        return [f"training_env_wake/dataset/{p}" for p in wake_missing()]
     if name == "fetch_code":
         return [f"training_env/{f}" for f in code_missing()]
     if name == "fetch_me2":
@@ -537,6 +673,7 @@ def stage_missing(name):
 
 
 NETWORK = {"fetch_code": "huggingface.co", "fetch_me2": "huggingface.co",
+           "fetch_wake_code": "huggingface.co", "fetch_wake_audio": "huggingface.co",
            "musan": "www.openslr.org", "pld": "mozilladatacollective.com"}
 
 
@@ -579,8 +716,16 @@ VCM_STAGES = [
     ("install", "copy the ONNX model and vocab.txt to models/", install_done, install),
 ]
 
-# Wake word stages go here later, in the same (name, description, done, action) form.
-WAKE_STAGES = []
+WAKE_STAGES = [
+    ("fetch_wake_code", "training_env_wake code and CSVs (HF)", fetch_wake_code_done, fetch_wake_code),
+    ("fetch_wake_audio", "SynTTS \"Alexa\" clips and Speech Noise Dataset clips (HF, ~1.4 GB)",
+     fetch_wake_audio_done, fetch_wake_audio),
+    ("verify", "every clip in the wake CSVs exists", verify_done, wake_verify),
+    ("preprocess", "decode to 16 kHz, crop to 1.5 s, cache", wake_preprocess_done, wake_preprocess),
+    ("train", "DS-CNN training (train.py), int8 ONNX export at the end", wake_train_done, wake_train),
+    ("export", "best_model.pth -> wake_word_model_quantized.onnx (if train did not)", wake_export_done, wake_export),
+    ("install", "copy the ONNX model to models/ (old one backed up)", wake_install_done, wake_install),
+]
 
 PIPELINES = {"vcm": VCM_STAGES, "wake": WAKE_STAGES}
 NOTES = {"pop_songs": pop_songs_note}
@@ -597,16 +742,29 @@ def get_args():
     p.add_argument("--force", action="store_true", help="rerun stages even if they look done")
     p.add_argument("--no-download", action="store_true",
                    help="never use the network; stop with a list of missing files instead")
-    p.add_argument("--workers", type=int, default=VCM["workers"] or os.cpu_count())
-    p.add_argument("--k", type=int, default=VCM["k"])
-    p.add_argument("--gpus", default=VCM["gpus"])
-    p.add_argument("--epochs", type=int, default=VCM["epochs"])
-    p.add_argument("--patience", type=int, default=VCM["patience"])
-    p.add_argument("--min_epochs", type=int, default=VCM["min_epochs"])
-    p.add_argument("--resume", action="store_true", default=VCM["resume"],
+    # Training settings: default to the CONFIG block of each model (see model_args).
+    p.add_argument("--workers", type=int)
+    p.add_argument("--k", type=int, default=VCM["k"], help="VCM only: augmented copies per clip")
+    p.add_argument("--gpus")
+    p.add_argument("--epochs", type=int)
+    p.add_argument("--patience", type=int)
+    p.add_argument("--min_epochs", type=int)
+    p.add_argument("--resume", action="store_true", default=None,
                    help="continue from last_checkpoint.pt instead of --fresh")
     args, args.train_args = p.parse_known_args()
     return args
+
+
+def model_args(model, args):
+    """args with every unset training option filled in from that model's CONFIG block."""
+    cfg = {"vcm": VCM, "wake": WAKE}[model]
+    margs = argparse.Namespace(**vars(args))
+    for key in ("workers", "gpus", "epochs", "patience", "min_epochs", "resume"):
+        if getattr(margs, key) is None:
+            setattr(margs, key, cfg[key])
+    margs.workers = margs.workers or os.cpu_count()
+    margs.extra_args = cfg["extra_args"]
+    return margs
 
 
 def ask(prompt):
@@ -619,7 +777,7 @@ def ask(prompt):
 def choose_model():
     print("Which model do you want to set up and train?\n"
           "  1) Voice command model (VCM)\n"
-          "  2) Wake word model (not available yet)\n"
+          "  2) Wake word model\n"
           "  3) Both")
     while True:
         choice = ask("Choose 1, 2 or 3: ")
@@ -627,22 +785,24 @@ def choose_model():
             return {"1": "vcm", "2": "wake", "3": "all"}[choice]
 
 
-def select(stages, args):
+def select(stages, args, models):
+    """Stages to run. With --model all, a stage only one model has (e.g. --only musan) is skipped for the other."""
     names = [s[0] for s in stages]
+    known = list(dict.fromkeys(s[0] for m in models for s in PIPELINES[m]))
     for opt in (args.start, args.only):
-        if opt and opt not in names:
-            sys.exit(f"Unknown stage '{opt}'. Stages: {', '.join(names)}")
+        if opt and opt not in known:
+            sys.exit(f"Unknown stage '{opt}'. Stages: {', '.join(known)}")
     if args.only:
         return [s for s in stages if s[0] == args.only]
     if args.start:
-        return stages[names.index(args.start):]
+        return stages[names.index(args.start):] if args.start in names else []
     return stages
 
 
 def show_plan(model, stages, args):
     print(f"\n=== {model} pipeline ===" + (" (no-download mode)" if args.no_download else ""))
     if not stages:
-        print("wake word pipeline not added yet")
+        print("(no stages selected)")
     for name, desc, done, _ in stages:
         is_done = done()
         status = "done" if is_done and not args.force else "todo"
@@ -679,9 +839,9 @@ def main():
         print(f"Passing to train.py: {' '.join(args.train_args)}")
 
     models = ["vcm", "wake"] if args.model == "all" else [args.model]
-    plans = [(m, select(PIPELINES[m], args) if PIPELINES[m] else []) for m in models]
+    plans = [(m, select(PIPELINES[m], args, models)) for m in models]
     for model, stages in plans:
-        show_plan(model, stages, args)
+        show_plan(model, stages, model_args(model, args))
     if args.dry_run:
         print("\nDry run: nothing was downloaded or run.")
         return
@@ -689,7 +849,7 @@ def main():
         return
 
     t0 = time.time()
-    summary = [(m,) + run_stages(m, s, args) for m, s in plans if s]
+    summary = [(m,) + run_stages(m, s, model_args(m, args)) for m, s in plans if s]
     print(f"\nSummary ({(time.time() - t0) / 60:.1f} min)")
     for model, ran, skipped in summary:
         print(f"  {model}: ran {', '.join(ran) or 'nothing'}; skipped (done) {', '.join(skipped) or 'nothing'}")

@@ -33,7 +33,7 @@ The Pi acts as a small smart-home hub. It listens all the time for the wake word
  microphone (48 kHz)
       │
       ▼
- wake_word_engine.py ── every 0.5 s: last 1.5 s of audio → wake word model ── "Alexa"? ──┐
+ wake_word_engine.py ── every 0.2 s: last 1.5 s of audio → wake word model ── "Alexa"? ──┐
       │                                                                                   │ yes
       │   beep, then stream the command audio (16 kHz, up to 5 s)                         │
       ▼                                                                                   │
@@ -49,7 +49,7 @@ The Pi acts as a small smart-home hub. It listens all the time for the wake word
  index.html ── updates the house view, widgets and chat at once
 ```
 
-1. **Wake word.** `voice_pipeline/wake_word_engine.py` keeps a rolling microphone buffer and scores the last 1.5 s every 0.5 s with the int8 wake word model. A score above 0.5 counts as "Alexa".
+1. **Wake word.** `voice_pipeline/wake_word_engine.py` keeps a rolling microphone buffer and scores the last 1.5 s every 0.2 s with the int8 wake word model. A score above 0.5 counts as "Alexa".
 2. **Recording.** The engine beeps, pauses any music so it does not leak into the recording, and streams the command audio into the voice command model.
 3. **Transcription.** The voice command model (VCM) outputs one of 120 tokens (118 words, `[UNK]` and the CTC blank) every 40 ms. The engine decodes it with a beam search that only accepts sentences the command grammar allows, so a finished command is recognised as soon as you pause.
 4. **Intent.** `voice_pipeline/intent_parser.py` turns the text into an action and value, for example `color → blue` or `timer → {minutes: 0, seconds: 30}`. Anything outside the grammar is rejected ("Didn't catch a command").
@@ -99,7 +99,7 @@ Small words such as *the, a, to, for, my* are optional. Previous song and an exa
 
 ## 2. Project structure
 
-Only the files needed to run the webpage and the voice pipeline are in this repository, plus `run_train_pipeline.py`. The training folders (`training_env/` for the voice command model, `training_env_wake/` for the wake word model) and the datasets are not; `run_train_pipeline.py` downloads them (section 6). Sections 7 and 8 describe the data and training.
+Only the files needed to run the webpage and the voice pipeline are in this repository, plus `run_train_pipeline.py`. The training folders (`training_env/` for the voice command model, `training_env_wake/` for the wake word model) and the datasets are not; `run_train_pipeline.py` downloads them (section 6). Sections 7 and 8 describe the data and training. On [Hugging Face](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/tree/v1.0), each of these folders has a `README.md` that says what it holds and where the data that is not stored there comes from.
 
 ```
 me2-vcm/
@@ -126,7 +126,7 @@ me2-vcm/
 │   └── benchmark_adapter.py       Writes one JSON line per command when VCM_BENCHMARK=1
 │                                  (for the course benchmark harness); idle otherwise
 ├── models/
-│   ├── wake_word_model_quantized.onnx   Wake word model, int8, 58 KB
+│   ├── wake_word_model_quantized.onnx   Wake word model, int8, 57 KB
 │   ├── voice_command_model.onnx         Voice command model, fp32, 3.8 MB, CMVN built in
 │   └── vocab.txt                        The VCM's 120 output tokens ([UNK] first, CTC blank last)
 ├── static/
@@ -148,13 +148,13 @@ me2-vcm/
 | Model | Size on the Pi | Holdout set | Holdout result | Test / validation result |
 |---|---|---|---|---|
 | **Voice command model** (causal DS-CNN + CTC) | 0.95 M params, 3.8 MB fp32 ONNX | AI231 ME2 Voice Commands, `holdout` split [[1]](#ref1): 202 clips, 93 command variations plus 16 out-of-scope clips, speakers never used in training | **Intent accuracy 95.5 %** (193 / 202); out-of-scope rejected 11 / 16 | Intent accuracy 96.7 % (4,297 / 4,443, ME2 `test` split); token F1 0.894, precision 0.918, recall 0.880, false alarm rate 0.0008 (integrated test split, 15,713 clips) |
-| **Wake word model** (DS-CNN clip classifier) | 33.6 k params, 58 KB int8 ONNX | *To be added* | *To be added* | Validation F1 0.957, accuracy 0.963, false alarm rate 0.037 (3,449 clips) |
+| **Wake word model** (DS-CNN clip classifier) | 33.6 k params, 57 KB int8 ONNX | *TODO* | *TODO* | Validation F1 0.984, precision 0.983, recall 0.985, accuracy 0.987, false alarm rate 0.012 (3,449 clips, best epoch 130) |
 
 How these were measured:
 
 - **VCM intent accuracy** is the share of clips whose decoded text maps to the correct action and value, with the same beam search and grammar the Pi uses (offline decode of 5 s clips on the laptop). On the live streaming path, 1,144 of 1,200 test clips were correct, recording stopped a median 30 ms after speech ended, and decoding took 2.1 ms per 80 ms step.
 - **VCM token metrics** come from `training_env/training_results.txt`, best epoch 309, on the speaker-disjoint integrated test split used for early stopping.
-- **Wake word metrics** are from the validation split during training (`training_env_wake/legacy/wake_training_results.txt`).
+- **Wake word metrics** are from the validation split during training, best epoch 130 (`training_env_wake/logs/wake_training_results.txt` on Hugging Face). The holdout evaluation is still to be added.
 
 ---
 
@@ -251,7 +251,7 @@ On current Raspberry Pi OS the browser command is `chromium` (older releases cal
 | Output | One probability (threshold 0.5) | 120 token scores every 40 ms (CTC) |
 | Parameters | 33,613 | 951,672 |
 | Loss | Binary cross-entropy | CTC |
-| Pi format | ONNX, int8 dynamic quantization, 58 KB | ONNX, fp32, CMVN folded into the graph, 3.8 MB |
+| Pi format | ONNX, int8 dynamic quantization, 57 KB | ONNX, fp32, CMVN folded into the graph, 3.8 MB |
 
 **Wake word model.** A strided 1-D convolution (40 filters, kernel 256, stride 160, so one frame per 10 ms) learns its own filterbank from the raw waveform. Three depthwise-separable blocks (40 → 64 → 100 → 128 channels, kernels 5, 5, 3, each with batch norm, ReLU and 15 % dropout) follow, then global average pooling and a linear layer with a sigmoid. The design follows the DS-CNN keyword spotters of Zhang et al. [[25]](#ref25). Datasets, preprocessing, augmentation and training details are in [section 8](#8-wake-word-model-data-and-training).
 
@@ -261,20 +261,22 @@ On current Raspberry Pi OS the browser command is `chromium` (older releases cal
 
 ## 6. Reproducing the training
 
-One command sets up the data, preprocesses, trains, exports and copies the new model into `models/`. The training code, the frozen train / test / holdout splits and the Common Voice clips are published on Hugging Face: [trueshotjames/ai231-king-me2](https://huggingface.co/datasets/trueshotjames/ai231-king-me2) (tag `v0.1-vcm`). Only the voice command model is available so far; the wake word pipeline is being added.
+One command sets up the data, preprocesses, trains, exports and copies the new model into `models/`. The training code, the frozen splits, the Common Voice clips and all wake word clips are published on Hugging Face: [trueshotjames/ai231-king-me2](https://huggingface.co/datasets/trueshotjames/ai231-king-me2), tag `v1.0`, DOI [10.57967/hf/10994](https://doi.org/10.57967/hf/10994). Tag `v0.1-vcm` is the earlier VCM-only version.
 
 ### What you need
 
-- A Linux machine with an NVIDIA GPU, an internet connection and plenty of free disk (MUSAN alone is 12 GB, the ME2 wav files about 7 GB, plus the feature cache).
-- Python 3, `ffmpeg` on the PATH, and the training packages:
+- A Linux machine with an NVIDIA GPU, an internet connection and plenty of free disk. For the VCM: MUSAN alone is 12 GB, the ME2 wav files about 7 GB, plus the feature cache. For the wake word model: about 1.4 GB of clips plus a 1.6 GB cache.
+- Python 3, `ffmpeg` on the PATH (VCM), and the training packages:
 
   ```bash
   pip install huggingface_hub
   python run_train_pipeline.py --model vcm --only fetch_code
   pip install -r training_env/requirements.txt pyarrow
+  python run_train_pipeline.py --model wake --only fetch_wake_code
+  pip install -r training_env_wake/requirements.txt
   ```
 
-- A free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database (see below).
+- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database (see below). The wake word model needs nothing outside the Hugging Face repository.
 
 ### Run it
 
@@ -282,7 +284,7 @@ One command sets up the data, preprocesses, trains, exports and copies the new m
 python run_train_pipeline.py
 ```
 
-A menu asks which model to train (voice command model, wake word model or both), shows the plan, and asks before it starts. Training settings and GPU numbers are in the `CONFIG` block at the top of `run_train_pipeline.py`.
+A menu asks which model to train (voice command model, wake word model or both), shows the plan, and asks before it starts. Training settings and GPU numbers are in the `CONFIG` block at the top of `run_train_pipeline.py` (`VCM` and `WAKE`; the `WAKE` values are those of the released wake word model).
 
 | Option | What it does |
 |---|---|
@@ -292,9 +294,9 @@ A menu asks which model to train (voice command model, wake word model or both),
 | `--from STAGE`, `--only STAGE` | Start at a stage, or run just one |
 | `--force` | Rerun stages even if their output exists |
 | `--no-download` | Never use the network: if data is missing, stop with a list of the missing files instead of downloading |
-| `--gpus 2,5`, `--epochs`, `--workers` … | Override the CONFIG values; other options go straight to `train.py` |
+| `--gpus 2,5`, `--epochs`, `--patience`, `--min_epochs`, `--workers` | Override the CONFIG values of the model(s) being run; other options go straight to `train.py` |
 
-Stages, in order (each is skipped when its output already exists, so a stopped run can simply be restarted):
+Voice command model stages, in order (each is skipped when its output already exists, so a stopped run can simply be restarted):
 
 | Stage | What it does |
 |---|---|
@@ -308,6 +310,20 @@ Stages, in order (each is skipped when its output already exists, so a stopped r
 | `verify` | Stops if any clip in the splits is missing |
 | `preprocess`, `train`, `export` | `preprocess.py`, `train.py`, `export_onnx.py` (section 7) |
 | `install` | Copies `voice_command_model.onnx` and `vocab.txt` into `models/` |
+
+Wake word model stages, in order:
+
+| Stage | What it does |
+|---|---|
+| `fetch_wake_code` | Downloads the `training_env_wake/` code and split CSVs from Hugging Face |
+| `fetch_wake_audio` | Downloads the 17,245 wake word clips (about 1.4 GB, already augmented) from Hugging Face |
+| `verify` | Stops if any clip in the wake CSVs is missing |
+| `preprocess` | `preprocess.py`: decodes every clip to 16 kHz mono, crops to 1.5 s and caches it |
+| `train` | `train.py` into `training_env_wake/train_logs/`; exports the int8 ONNX at the end |
+| `export` | Re-exports `best_model.pth` to `wake_word_model_quantized.onnx` if `train` did not |
+| `install` | Backs up the current `models/wake_word_model_quantized.onnx`, then copies the new one there |
+
+With `--model all`, stage names shared by both models (`verify`, `preprocess`, `train`, `export`, `install`) apply to both in `--from` and `--only`.
 
 ### The Philippine Languages Database
 
@@ -326,6 +342,7 @@ Everything, including the Philippine Languages Database, is already in place on 
 ```bash
 cd "/home/king.james.villasin/sandbox/Machine Exercise 2"
 python run_train_pipeline.py --model vcm --yes
+python run_train_pipeline.py --model wake --yes     # inside tmux; the wake clips are already in training_env_wake/dataset/
 ```
 
 ---
@@ -415,32 +432,57 @@ The logs of this run (`vcm_train.log`, `vcm_training_results.txt`) are in [`trai
 
 ## 8. Wake word model: data and training
 
-This describes the deployed wake word model. A new wake word pipeline is being added to `run_train_pipeline.py`; until then, option 2 of its menu is not available.
+This describes the deployed wake word model (`models/wake_word_model_quantized.onnx`, release `v1.0`). `run_train_pipeline.py --model wake` reproduces it (section 6); the code, splits, clips and logs are in `training_env_wake/` on [Hugging Face](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/tree/v1.0/training_env_wake).
 
 ### Datasets
 
-| Source | Clips (train / validation) | Label |
-|---|---|---|
-| SynTTS-Commands, "Alexa" [[19]](#ref19): CosyVoice 2 [[15]](#ref15) clones of VoxCeleb [[20]](#ref20) [[21]](#ref21) voices | 5,796 / 1,449 | 1 (wake) |
-| Speech Noise Dataset [[22]](#ref22): background noise and speech | 8,000 / 2,000 | 0 (not wake) |
-| **Total** | **13,796 / 3,449** | |
+All clips are already augmented, so they are published as they are and used without further augmentation.
 
-### Preprocessing and augmentation
+| Source | Clips (train / validation) | Label | License |
+|---|---|---|---|
+| SynTTS-Commands, "Alexa" [[19]](#ref19): CosyVoice 2 [[15]](#ref15) clones of VoxCeleb [[20]](#ref20) [[21]](#ref21) voices | 5,796 / 1,449 | 1 (wake) | MIT |
+| SynTTS-Commands [[19]](#ref19), 15 other spoken commands such as "Hey Google" and "Volume up", same cloned voices (`speech-noise-dataset/VoxCeleb12_English/`) | 5,600 / 1,400 | 0 (not wake) | MIT |
+| Speech Noise Dataset [[22]](#ref22): noise and noisy speech (`speech-noise-dataset/noise_chopped/`) | 2,400 / 600 | 0 (not wake) | CC0 |
+| **Total** | **13,796 / 3,449** (4.54 h / 1.14 h) | | |
+| Holdout set | *TODO* | | |
 
-- Each clip is converted to mono and resampled to 16 kHz.
-- Clips longer than 1.5 s are cropped. Shorter clips are padded with silence, with the clip placed at a random position inside the 1.5 s window, so the model learns to detect "Alexa" anywhere in the window. This random shift is redrawn every epoch.
+### Preprocessing
+
+`training_env_wake/preprocess.py` runs once on the CPU (32 workers, 15 s on the cluster) and caches every clip:
+
+- Each clip is converted to mono and resampled to 16 kHz (soundfile and scipy, the same resampler the Pi engine uses).
+- Clips longer than 1.5 s are cropped. Shorter clips are stored as they are; `train.py` places each one at a random offset in the 1.5 s window, padded with silence, redrawn every epoch, so the model learns to detect "Alexa" anywhere in the window. Validation clips get a fixed placement, so validation F1 is comparable between epochs.
 - The model works on the raw waveform, so there is no separate feature step: the first convolution learns the filterbank.
 
 ### Training and export
 
 | Setting | Value |
 |---|---|
+| Hardware | 2 × NVIDIA A100-SXM4-40GB (GPUs 0 and 6 of DGX node `ai-n002.hpc.coe.upd.edu.ph`), PyTorch 2.13 DDP, CUDA 13.0 |
+| Run | 15 October 2026, 16:30 to 16:33 (UTC+8), one run, no resume |
+| Wall-clock | About 1 min 41 s in total: preprocessing 15 s, training 86 s (180 epochs, about 0.25 s each with the whole cache in GPU memory) |
+| Seed | 1234 |
+| Batch | 256 clips per GPU (512 per step, 26 steps per epoch) |
+| Optimiser | AdamW, weight decay 1e-4, peak learning rate 0.002 × √(GPUs) = 0.00283 |
+| Schedule | One-cycle: warmup over the first 10 % of steps, then cosine decay |
 | Loss | Binary cross-entropy |
-| Optimiser | Adam, learning rate 0.001 |
-| Model selection | Best validation F1, with early stopping |
-| Export | ONNX, then int8 dynamic quantization (`QUInt8`), 58 KB |
+| Model selection | Best validation F1; at most 500 epochs, at least 50, early stop after 50 without improvement |
+| Result | Best epoch 130 of 180: F1 0.984, precision 0.983, recall 0.985, accuracy 0.987, false alarm rate 0.012 (TP 1,427, FP 24, TN 1,976, FN 22) |
+| Export | ONNX, then int8 dynamic quantization (`QUInt8`), 57 KB; input `[1, 24000]`, output `[1, 1]` |
 
-On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and scores the latest 1.5 s every 0.5 s.
+`run_train_pipeline.py --model wake` runs these steps with the same settings (the `WAKE` block). By hand, from `training_env_wake/`:
+
+```bash
+python -u preprocess.py --workers 32
+python -u train.py --gpus 0,6 --fresh --out_dir train_logs --epochs 500 --min_epochs 50 --patience 50 \
+  --batches 256 --lr 0.002 --seed 1234 --ckpt_every 500
+```
+
+`train.py` exports `train_logs/wake_word_model_quantized.onnx` at the end. The cluster guide with every step is `training_env_wake/WAKE_TRAINING_STEPS.md`.
+
+The logs of this run (`wake_train.log`, `wake_training_results.txt`, `wake_results.json`, `wake_preprocess_report.txt`) are in [`training_env_wake/logs/`](https://huggingface.co/datasets/trueshotjames/ai231-king-me2/tree/v1.0/training_env_wake/logs) on Hugging Face. The weights (int8 ONNX and PyTorch checkpoint) are attached to the [`v1.0` release](https://github.com/trueshotjames/me2-vcm/releases/tag/v1.0).
+
+On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and scores the latest 1.5 s every 0.2 s.
 
 ---
 
@@ -489,4 +531,4 @@ On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and sco
 
 The code in this repository is under the [MIT License](LICENSE).
 
-The trained models (`models/*.onnx` and the weights in the [releases](https://github.com/trueshotjames/me2-vcm/releases)) are under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), because their training data includes non-commercial and research-only sources (section 7). The training code and data splits on [Hugging Face](https://huggingface.co/datasets/trueshotjames/ai231-king-me2) are CC BY-NC 4.0, with per-source terms in its `LICENSE.md`. The demo songs in `playlist/` belong to their artists and are not covered by either license.
+The trained models (`models/*.onnx` and the weights in the [releases](https://github.com/trueshotjames/me2-vcm/releases)) are under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), because their training data includes non-commercial and research-only sources (section 7). The training code, data splits and logs on [Hugging Face](https://huggingface.co/datasets/trueshotjames/ai231-king-me2) are CC BY-NC 4.0; the wake word clips there keep their own licenses (SynTTS-Commands clips MIT, Speech Noise Dataset clips CC0), listed in its `LICENSE.md`. The demo songs in `playlist/` belong to their artists and are not covered by either license.
