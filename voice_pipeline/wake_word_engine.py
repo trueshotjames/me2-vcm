@@ -309,7 +309,7 @@ class WakeWordEngine:
 
         # Timing constraints
         self.window_duration = 1.5
-        self.hop_duration = 0.5
+        self.hop_duration = 0.2   # check for the wake word 5 times a second
 
         # Allocate a rolling 3-second recording loop buffer in RAM[cite: 12]
         self.buffer_duration = 3.0
@@ -376,6 +376,8 @@ class WakeWordEngine:
 
     def start_listening(self):
         print("Wake Word Engine started silently in the background...")
+        if _benchmark_mode():
+            benchmark_adapter.open_log()   # held open for the whole run (see benchmark_adapter.py)
         with self.stream:
             while True:
                 # Wait for the exact hop duration
@@ -432,6 +434,8 @@ class WakeWordEngine:
         # Tell UI we are in Voice Command Mode
         post_async('/set_status', {'status': 'recording'})
         print("\n[System] Command trigger detected.")
+        if _benchmark_mode():
+            benchmark_adapter.log_wake()
 
         # 1. Sound the beep and wait until it has finished (the mic stream keeps running)
         play_beep()
@@ -447,7 +451,13 @@ class WakeWordEngine:
         print(f"[VCM Output]: {transcribed_command}  ({reason}, {result['audio_ms']:.0f} ms of audio"
               + (f", stopped {result['tail_ms']:.0f} ms after the last word)" if result['tail_ms'] is not None else ")"))
 
-        # 3. Pass the command to the UI, which runs it
+        # 3. Log the result for the benchmark first: it measures latency up to this line,
+        #    so it must not wait for the UI below
+        if _benchmark_mode():
+            benchmark_adapter.log_benchmark_result(transcribed_command, result['infer_ms'],
+                                                   audio_ms=round(result['audio_ms']))
+
+        # 4. Pass the command to the UI, which runs it
         try:
             requests.post('http://127.0.0.1:5000/voice_result', json={
                 'text': transcribed_command, 'heard': result['heard'],
@@ -457,9 +467,6 @@ class WakeWordEngine:
         except Exception:
             pass
 
-        if _benchmark_mode():
-            benchmark_adapter.log_benchmark_result(transcribed_command, result['infer_ms'],
-                                                   audio_ms=round(result['audio_ms']))
 
         # Save the first 5 commands as 5 s WAV files (zero-padded) for checking
         if self.saved_clip_count < 5:

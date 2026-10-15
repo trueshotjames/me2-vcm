@@ -5,8 +5,9 @@
 # intent_parser module (same directory).
 #
 # The benchmark reads one JSON object per line from the newest *.log file in
-# ~/vcm_benchmark/. Each line records the mapped intent name, the formatted
-# slot string, and the inference/audio timings.
+# ~/vcm_benchmark/. Each command line records the mapped intent name, the formatted
+# slot string, and the inference/audio timings; a {"event": "wake"} line marks
+# each wake word detection.
 
 import os
 import sys
@@ -98,7 +99,37 @@ def format_slot(action, value):
     return ""
 
 
-# 4. Parse transcribed text, map it, and append one JSON line to the log.
+# 4. One log file per engine run, opened once and kept open. The benchmark follows the
+#    newest *.log in ~/vcm_benchmark/ and finds this process by the log file it holds open
+#    (for its CPU/RAM numbers), so the file must stay open for the whole run.
+_log = None
+
+
+def open_log():
+    """Opens ~/vcm_benchmark/benchmark_<timestamp>.log (once) and returns it."""
+    global _log
+    if _log is None:
+        log_dir = os.path.join(os.path.expanduser("~"), "vcm_benchmark")
+        os.makedirs(log_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(log_dir, "benchmark_{}.log".format(timestamp))
+        _log = open(path, "a", encoding="utf-8", buffering=1)
+        print("[Benchmark] Logging to {}".format(path))
+    return _log
+
+
+def _write(record):
+    fh = open_log()
+    fh.write(json.dumps(record) + "\n")
+    fh.flush()
+
+
+def log_wake():
+    """One line when the wake word fires: gives the benchmark's wake detection rate."""
+    _write({"event": "wake"})
+
+
+# 5. Parse transcribed text, map it, and append one JSON line to the log.
 def log_benchmark_result(transcribed_text, infer_ms, audio_ms=5000):
     action, value = parse_text(transcribed_text)
 
@@ -109,26 +140,16 @@ def log_benchmark_result(transcribed_text, infer_ms, audio_ms=5000):
 
     slot = format_slot(action, value)
 
-    log_dir = os.path.join(os.path.expanduser("~"), "vcm_benchmark")
-    os.makedirs(log_dir, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    log_path = os.path.join(log_dir, "benchmark_{}.log".format(timestamp))
-
-    record = {
+    _write({
         "intent": intent,
         "slot": slot,
         "infer_ms": round(infer_ms, 1),
         "audio_ms": audio_ms,
-    }
+    })
 
-    with open(log_path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record) + "\n")
-        fh.flush()
-
-    print("Logged intent '{}' slot='{}' to {}".format(intent, slot, log_path))
+    print("Logged intent '{}' slot='{}' to {}".format(intent, slot, _log.name))
 
 
-# 5. Benchmark mode is enabled by the VCM_BENCHMARK environment variable.
+# 6. Benchmark mode is enabled by the VCM_BENCHMARK environment variable.
 def is_benchmark_mode():
     return os.environ.get("VCM_BENCHMARK") == "1"
