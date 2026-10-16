@@ -75,10 +75,9 @@ That is roughly 0.45 s plus the model's run time and audio start-up on the Pi. A
 
 ## Benchmark mode behaviour
 
-With `VCM_BENCHMARK=1` (set by `run_benchmark.sh`) the engine differs from normal use (`run.sh`) in two ways:
+With `VCM_BENCHMARK=1` (set by `run_benchmark.sh`) the engine differs from normal use (`run.sh`) in one way:
 
 - **No UI, no music.** The engine sends nothing to `main_ui.py`: results are only written to the log. Commands like PLAY_MUSIC or NEXT never start playback, even if the UI is open.
-- **Wake word held between commands.** After each wake, the wake model is switched off for 10 s (`BENCH_WAKE_HOLD_SEC`), then listens again. The benchmark plays the next "Alexa" at least 12.4 s after the previous one ends (measured on run 20261016-230412: median 16 s, 10 to 15 s random gap after each command), so the model is only active when the next command can arrive.
 
 In both modes the command recording also stops on silence: 0.6 s after the voice goes quiet (`SILENCE_STOP_MS`), or 1.5 s after the beep if no voice is heard at all (`NO_VOICE_SEC`), whether or not the voice model recognised any words. The 5 s cap (`MAX_COMMAND_SEC`) stays as a backstop.
 

@@ -26,8 +26,6 @@ NO_VOICE_SEC       = 1.5   # stop if no voice at all is heard this long after th
 VOICE_MIN_FRAMES   = 3     # 40 ms voice frames needed before the recording counts as "voice heard"
 MAX_COMMAND_SEC    = 5.0   # hard cap on the recording
 BEEP_GUARD_MS      = 30    # skip this much mic audio after the beep ends (speaker echo)
-BENCH_WAKE_HOLD_SEC = 10.0 # benchmark mode: wake word ignored this long after each wake. The benchmark plays
-                           # the next "Alexa" at least 12.4 s after the previous one ends (run 20261016-230412)
 BEEP_PEAK          = 0.7   # fixed beep loudness (0-1 of full scale), independent of the music volume
 DECODE_TICK_MS     = 80    # how often the VCM re-runs on the audio so far while recording
 
@@ -336,8 +334,6 @@ class WakeWordEngine:
         # followed by the start of any speech (score ~0.99), so it only runs once the whole
         # 1.5 s window holds real audio.
         self.filled = 0
-        # Benchmark mode: no wake detection before this time.monotonic() value (see BENCH_WAKE_HOLD_SEC)
-        self.wake_hold_until = 0.0
 
         # While a command is recorded, the same stream also feeds this queue
         self.capturing = False
@@ -406,10 +402,6 @@ class WakeWordEngine:
                 # Wait for the exact hop duration
                 time.sleep(self.hop_duration)
 
-                # Benchmark mode: the wake model only runs when the next test command can arrive
-                if _benchmark_mode() and time.monotonic() < self.wake_hold_until:
-                    continue
-
                 # Extract the most recent 1.5 seconds from the rolling buffer
                 clip_size = int(self.window_duration * self.native_sr)
                 window_full = self.filled >= clip_size
@@ -443,8 +435,6 @@ class WakeWordEngine:
                     manual_trigger = True
 
                 if prediction == "wake" or manual_trigger:
-                    if _benchmark_mode():
-                        self.wake_hold_until = time.monotonic() + BENCH_WAKE_HOLD_SEC
                     try:
                         self.handle_command()
                     except Exception as e:
