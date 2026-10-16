@@ -50,8 +50,28 @@ def music_state():
         status = "stopped"
     return {"status": status, "song": current_song() if status != "stopped" else None, "volume": current_volume}
 
-# Music paused while a voice command is being recorded (resumed afterwards)
-music_paused_for_voice = False
+# Music ducked to DUCK_VOLUME while a voice command is being recorded (restored afterwards)
+DUCK_VOLUME = 20
+DUCK_FADE_SEC = 0.6
+music_ducked = False
+_fade_id = 0
+
+def fade_volume(target):
+    """Fades the player's volume to target over DUCK_FADE_SEC (a newer fade cancels this one)."""
+    global _fade_id
+    _fade_id += 1
+    my_id = _fade_id
+    def run():
+        start = player.audio_get_volume()
+        if start < 0:
+            start = target
+        steps = 30
+        for i in range(1, steps + 1):
+            if _fade_id != my_id:
+                return
+            player.audio_set_volume(round(start + (target - start) * i / steps))
+            time.sleep(DUCK_FADE_SEC / steps)
+    threading.Thread(target=run, daemon=True).start()
 
 # --- Push updates to the page (Server-Sent Events) instead of having it poll ---
 _listeners = []
@@ -299,7 +319,7 @@ def execute_command(action, value):
     elif action == 'call_dad':
         return ({"status": "success", "message": "System: Calling Dad..."})
     elif action == 'message':
-        return ({"status": "success", "message": "System: Opening messages..."})
+        return ({"status": "success", "message": "System: Sending message..."})
 
     return ({"status": "error"})
 
@@ -316,7 +336,7 @@ voice_result = {"id": 0, "text": "", "action": None, "value": None}
 
 @app.route('/voice_result', methods=['POST'])
 def post_voice_result():
-    global voice_result, music_paused_for_voice
+    global voice_result
     data = request.json
     text = data.get('text', '')
     action, value = parse_text(text)
@@ -326,9 +346,6 @@ def post_voice_result():
     for key in ('heard', 'top', 'margin', 'infer_ms', 'decode_ms', 'audio_ms', 'end_reason'):
         if key in data:
             voice_result[key] = data[key]
-    # A pause/stop command keeps the music that was paused for recording paused
-    if action in ('music_pause', 'music_stop'):
-        music_paused_for_voice = False
     # Run the command here and now; the page only shows the result
     if action != "Unrecognized":
         voice_result["response"] = execute_command(action, value)
@@ -344,15 +361,15 @@ system_listening_status = "listening"
 
 @app.route('/set_status', methods=['POST'])
 def set_status():
-    global system_listening_status, music_paused_for_voice
+    global system_listening_status, music_ducked
     system_listening_status = request.json.get('status', 'listening')
-    # Pause music while a command is recorded so it doesn't leak into the clip
-    if system_listening_status == 'recording' and player.is_playing():
-        player.set_pause(1)
-        music_paused_for_voice = True
-    elif system_listening_status == 'listening' and music_paused_for_voice:
-        player.set_pause(0)
-        music_paused_for_voice = False
+    # Turn the music down while a command is recorded, and back up afterwards
+    if system_listening_status == 'recording' and player.is_playing() and not music_ducked:
+        music_ducked = True
+        fade_volume(min(DUCK_VOLUME, current_volume))
+    elif system_listening_status == 'listening' and music_ducked:
+        music_ducked = False
+        fade_volume(current_volume)
     publish('status', status_payload())
     return jsonify({"status": "success"})
 

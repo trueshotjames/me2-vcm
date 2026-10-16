@@ -305,7 +305,6 @@ class WakeWordEngine:
         # Hardware native rate and target model rate[cite: 12]
         self.native_sr = 48000
         self.target_sr = 16000
-        self.saved_clip_count = 0  # Tracks the number of saved VCM clips
 
         # Timing constraints
         self.window_duration = 1.5
@@ -408,9 +407,6 @@ class WakeWordEngine:
                 score = raw_output[0][0][0]
                 prediction = "wake" if score > 0.5 else "nonwake"
 
-                # 4. Print horizontally for easy terminal monitoring
-                print(f"[{prediction}] ", end="", flush=True)
-
                 # Check if the manual record button in the UI was clicked
                 manual_trigger = False
                 if os.path.exists("manual_trigger.txt"):
@@ -433,7 +429,6 @@ class WakeWordEngine:
         """Beep, record until the command is finished, decode, and send the result to the UI."""
         # Tell UI we are in Voice Command Mode
         post_async('/set_status', {'status': 'recording'})
-        print("\n[System] Command trigger detected.")
         if _benchmark_mode():
             benchmark_adapter.log_wake()
 
@@ -442,14 +437,10 @@ class WakeWordEngine:
         time.sleep(BEEP_GUARD_MS / 1000.0)
 
         # 2. Record and decode until the command is finished (max MAX_COMMAND_SEC)
-        print("[System] Listening for command...")
         result, reason = self.record_command()
         post_async('/set_status', {'status': 'decoding'})
 
         transcribed_command, decode_details = result["text"], result["details"]
-        print(f"[VCM Raw]: {result['heard']}")
-        print(f"[VCM Output]: {transcribed_command}  ({reason}, {result['audio_ms']:.0f} ms of audio"
-              + (f", stopped {result['tail_ms']:.0f} ms after the last word)" if result['tail_ms'] is not None else ")"))
 
         # 3. Log the result for the benchmark first: it measures latency up to this line,
         #    so it must not wait for the UI below
@@ -467,17 +458,6 @@ class WakeWordEngine:
         except Exception:
             pass
 
-
-        # Save the first 5 commands as 5 s WAV files (zero-padded) for checking
-        if self.saved_clip_count < 5:
-            self.saved_clip_count += 1
-            target_len = int(5.0 * self.target_sr)
-            padded_audio = np.zeros(target_len, dtype=np.float32)
-            recorded = result['audio'][:target_len]
-            padded_audio[:len(recorded)] = recorded
-            clip_filename = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', f'vcm_debug_clip_{self.saved_clip_count}.wav'))
-            sf.write(clip_filename, padded_audio, self.target_sr)
-            print(f"[System] Saved VCM debug clip: vcm_debug_clip_{self.saved_clip_count}.wav")
 
 if __name__ == "__main__":
     try:

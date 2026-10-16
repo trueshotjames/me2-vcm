@@ -131,37 +131,32 @@ PATTERNS = [
     ("message", "[send] [a|my] message"),
 ]
 
-# What the UI suggests ("What can I say?"), grouped by action
+# What the UI suggests ("What can I say?"), grouped by command (exactly the phrase list in variations.csv)
 GUIDE = {
-    "music_play": ["play music", "start music", "play some music", "play a song"],
-    "music_pause": ["pause", "pause audio", "pause song"],
-    "music_stop": ["stop", "stop playing", "end playback"],
-    "music_skip": ["next song", "skip song", "play next song", "skip"],
-    "music_vol_up": ["volume up", "increase the volume", "turn the volume up", "turn up volume", "louder"],
-    "music_vol_down": ["volume down", "lower the volume", "turn the volume down", "quieter"],
-    "weather": ["weather", "what's the weather", "tell me the weather"],
-    "time": ["time", "what time is it", "tell me the time"],
-    "toggle": ["lights on", "turn on the lights", "turn the lights on", "power on the lights",
-               "lights out", "lights off", "turn off lights", "kill the lights", "shut off the lights"],
-    "dim": ["brightness {0-100} percent", "adjust brightness to {0-100} percent",
-            "brightness level {0-100} percent", "dim the lights to {0-100} percent"],
-    "temp": ["temperature {16-30} degrees", "change the temperature to {16-30} degrees",
-             "set the temperature to {16-30} degrees", "set temperature {16-30} degrees"],
-    "color": ["change color to red", "switch color to blue", "set color to green", "turn the lights blue"],
-    "timer": ["timer {1-59} seconds|minutes", "countdown for {1-59} seconds|minutes",
-              "start a timer for {1-59} seconds|minutes", "set timer one minute thirty seconds"],
-    "alarm": ["alarm {1-12} [o'clock] am|pm", "wake me up at {1-12} [o'clock] am|pm",
-              "set an alarm for {1-12} [o'clock] am|pm", "set alarm six thirty am"],
-    "reminder": ["reminder drink water", "remind me to study", "create a reminder to exercise",
-                 "remind me to pay bills"],
-    "get_reminders": ["reminders", "show my reminders", "list my reminders", "what are my reminders"],
-    "call_mom": ["call", "make a phone call", "call mom", "call dad"],
-    "message": ["message", "send a message", "send my message"],
+    "PLAY_MUSIC": ["Play music", "Start music", "Play some music"],
+    "WEATHER": ["Weather", "What's the weather?", "Tell me the weather"],
+    "TIME": ["Time", "What time is it?", "Tell me the time"],
+    "LIGHT_ON": ["Lights on", "Power on the lights", "Turn on the lights"],
+    "LIGHT_OFF": ["Lights out", "Kill the lights", "Shut off the lights"],
+    "PAUSE": ["Pause", "Pause audio", "Pause song"],
+    "STOP": ["Stop", "Stop playing", "End playback"],
+    "NEXT": ["Next song", "Skip song", "Play next song"],
+    "VOLUME_UP": ["Volume up", "Increase the volume", "Turn the volume up"],
+    "VOLUME_DOWN": ["Volume down", "Lower the volume", "Turn the volume down"],
+    "CALL": ["Call", "Make a call", "Make a phone call"],
+    "MESSAGE": ["Message", "Send a message", "Send my message"],
+    "LIST_REMINDERS": ["Reminders", "Show my reminders", "List my reminders"],
+    "TIMER": ["Timer 10 seconds", "Timer 30 seconds", "Timer 1 minute", "Countdown for 10 seconds", "Countdown for 30 seconds", "Countdown for 1 minute", "Start a timer for 10 seconds", "Start a timer for 30 seconds", "Start a timer for 1 minute"],
+    "ALARM": ["Alarm 6:00 AM", "Alarm 8:00 AM", "Alarm 9:00 PM", "Wake me up at 6:00 AM", "Wake me up at 8:00 AM", "Wake me up at 9:00 PM", "Set an alarm for 6:00 AM", "Set an alarm for 8:00 AM", "Set an alarm for 9:00 PM"],
+    "TEMPERATURE": ["Temperature 18 degrees", "Temperature 22 degrees", "Temperature 26 degrees", "Change the temperature to 18 degrees", "Change the temperature to 22 degrees", "Change the temperature to 26 degrees", "Set the temperature to 18 degrees", "Set the temperature to 22 degrees", "Set the temperature to 26 degrees"],
+    "BRIGHTNESS": ["Brightness 20 percent", "Brightness 60 percent", "Brightness 100 percent", "Adjust brightness to 20 percent", "Adjust brightness to 60 percent", "Adjust brightness to 100 percent", "Brightness level 20 percent", "Brightness level 60 percent", "Brightness level 100 percent"],
+    "COLOR": ["Change color to Red", "Change color to Blue", "Change color to Green", "Switch color to Red", "Switch color to Blue", "Switch color to Green", "Set color to Red", "Set color to Blue", "Set color to Green"],
+    "CREATE_REMINDER": ["Reminder Drink water", "Reminder Study", "Reminder Exercise", "Remind me to Drink water", "Remind me to Study", "Remind me to Exercise", "Create a reminder to Drink water", "Create a reminder to Study", "Create a reminder to Exercise"],
 }
 
 
 def command_guide():
-    """Phrases the UI can suggest, grouped by action. Number slots are shown as ranges."""
+    """Phrases the UI can suggest, grouped by command."""
     return {action: list(phrases) for action, phrases in GUIDE.items()}
 
 

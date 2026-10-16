@@ -479,6 +479,8 @@
         }
 
         // ---------- House chips ----------
+        let timerLeft = null;   // seconds left on the running timer, null when none
+        const formatTimer = secs => `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
         function renderChips() {
             const c = LIGHT_COLORS[light.color] || LIGHT_COLORS.fire;
             const chips = [
@@ -486,6 +488,7 @@
                 `<span class="chip">${document.getElementById('thermostat-display').innerText}</span>`,
                 `<span class="chip">🔊 ${music.volume}%</span>`,
             ];
+            if (timerLeft !== null) chips.push(`<span class="chip">⏱ ${formatTimer(timerLeft)}</span>`);
             if (music.status !== 'stopped' && music.song) chips.push(`<span class="chip">${music.status === 'playing' ? '♪' : '⏸'} ${escapeHtml(music.song)}</span>`);
             document.getElementById('houseChips').innerHTML = chips.join('');
         }
@@ -537,8 +540,9 @@
 
         // ---------- Command executor (every source ends here) ----------
         async function sendCommand(action, value = null, source = 'button') {
-            // Dimming needs the lights on
-            if (action === 'dim' && !light.on) {
+            // Dimming and color need the lights on
+            if ((action === 'dim' || action === 'color') && !light.on) {
+                showPopup('info-popup', '💡 The lights are off', 1500);
                 updateChat("System: The lights are off. Turn them on first.", source);
                 return;
             }
@@ -557,9 +561,12 @@
             applyCommand(action, value, data, source);
         }
 
+        const MUSIC_ICON = { music_play: '♪', music_pause: '⏸', music_stop: '⏹', music_skip: '⏭', music_prev: '⏮', music_vol_up: '🔊', music_vol_down: '🔉' };
+
         // Shows a command's result on the page (data = the server's response)
         function applyCommand(action, value, data, source) {
-            if (action === 'dim' && !light.on) {
+            if ((action === 'dim' || action === 'color') && !light.on) {
+                showPopup('info-popup', '💡 The lights are off', 1500);
                 updateChat("System: The lights are off. Turn them on first.", source);
                 return;
             }
@@ -571,7 +578,8 @@
 
                 if (action === 'toggle') {
                     light.on = value === 'on' ? true : value === 'off' ? false : !light.on;
-                    if (light.on && light.brightness === 0) light.brightness = 100;
+                    // Lights on = default lighting (fire, 100%)
+                    if (light.on) { light.brightness = 100; light.color = 'fire'; }
                     renderLighting();
                     showPopup('switch-popup', light.on ? "Switch: ON" : "Switch: OFF", 1000);
                 } else if (action === 'dim') {
@@ -581,7 +589,7 @@
                 } else if (action === 'color') {
                     light.color = (value && value !== 'none') ? value : 'fire';
                     renderLighting();
-                    showPopup('info-popup', light.on ? `Lights adjust to color ${data.display_color}.` : `Color ${data.display_color} saved for when the lights are on.`, 2000);
+                    showPopup('info-popup', `Lights adjust to color ${data.display_color}.`, 2000);
                 } else if (action === 'temp') {
                     document.getElementById('thermostat-display').innerText = value + "°C";
                     renderChips();
@@ -593,27 +601,34 @@
                     let totalSeconds = (data.minutes * 60) + data.seconds;
                     if (typeof countdownInterval !== 'undefined') clearInterval(countdownInterval);
                     function updateTimerDisplay(secs) {
-                        let mins = Math.floor(secs / 60);
-                        let remSecs = secs % 60;
-                        document.getElementById('timer-display').innerText =
-                            (mins < 10 ? "0" + mins : mins) + ":" + (remSecs < 10 ? "0" + remSecs : remSecs);
+                        timerLeft = secs;
+                        document.getElementById('timer-display').innerText = formatTimer(secs);
+                        renderChips();
                     }
                     updateTimerDisplay(totalSeconds);
+                    showPopup('info-popup', `⏱ Timer set for ${formatTimer(totalSeconds)}`, 1500);
                     countdownInterval = setInterval(() => {
                         totalSeconds--;
                         if (totalSeconds < 0) {
                             clearInterval(countdownInterval);
                             document.getElementById('timer-display').innerText = "00:00";
+                            timerLeft = null;
+                            renderChips();
+                            showPopup('info-popup', "⏰ Time's up!", 3000);
                         } else {
                             updateTimerDisplay(totalSeconds);
                         }
                     }, 1000);
                 } else if (action === 'alarm') {
                     addListItem('alarm-list', 'Alarm: ' + formatAlarm(value));
+                    showPopup('info-popup', '⏰ Alarm set for ' + formatAlarm(value), 2000);
                 } else if (action === 'reminder') {
                     addListItem('reminder-list', value);
+                    showPopup('info-popup', '📝 Reminder: ' + value, 2000);
                 } else if (action.startsWith('music_')) {
                     applyMusic(data.music);
+                    // The slider shows its own value; no pop-up for each drag
+                    if (action !== 'music_vol_set') showPopup('info-popup', `${MUSIC_ICON[action] || '♪'} ${String(data.message || '').replace(/^System: /, '')}`, 1500);
                 } else if (action === 'get_reminders') {
                     showPopup('reminders-popup', "Your Reminders:\n\n" + data.data, 4000);
                 } else if (action === 'call_mom' || action === 'call_dad') {
@@ -622,7 +637,7 @@
                     ringtone.play().catch(e => console.log("Audio play error:", e));
                     setTimeout(() => { ringtone.pause(); ringtone.currentTime = 0; }, 2000);
                 } else if (action === 'message') {
-                    showPopup('info-popup', '✉️ Opening messages', 2000);
+                    showPopup('info-popup', '✉️ Sending message', 2000);
                 } else if (action === 'weather' || action === 'time') {
                     showPopup('info-popup', data.message, 3000);
                 }
@@ -889,11 +904,10 @@
 
         // ---------- Command list (suggestions + cheat sheet) ----------
         const GROUP_NAMES = {
-            music_play: 'Play music', music_pause: 'Pause', music_stop: 'Stop', music_skip: 'Next song',
-            music_vol_up: 'Volume up', music_vol_down: 'Volume down', weather: 'Weather', time: 'Time',
-            toggle: 'Lights on / off', dim: 'Brightness', color: 'Light color', temp: 'Temperature',
-            timer: 'Timer', alarm: 'Alarm', reminder: 'Add reminder', get_reminders: 'List reminders',
-            call_mom: 'Call', message: 'Message'
+            PLAY_MUSIC: 'Play music', WEATHER: 'Weather', TIME: 'Time', LIGHT_ON: 'Lights on', LIGHT_OFF: 'Lights off',
+            PAUSE: 'Pause', STOP: 'Stop', NEXT: 'Next song', VOLUME_UP: 'Volume up', VOLUME_DOWN: 'Volume down',
+            CALL: 'Call', MESSAGE: 'Message', LIST_REMINDERS: 'List reminders', TIMER: 'Timer', ALARM: 'Alarm',
+            TEMPERATURE: 'Temperature', BRIGHTNESS: 'Brightness', COLOR: 'Color', CREATE_REMINDER: 'Create reminder'
         };
         // Example values for the {range} slots
         const exampleOf = phrase => phrase
