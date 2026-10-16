@@ -73,6 +73,26 @@ After "Alexa" ends, the Pi needs time before it records the command:
 
 That is roughly 0.45 s plus the model's run time and audio start-up on the Pi. A 1.0 s pause in the benchmark leaves room for this. If the warm-up commands in the benchmark's sound check lose their first word, raise the pause.
 
+## Results
+
+Run `20261017-015001` (17 October 2026), full holdout, 218 trials. The files are in [`benchmark_results/20261017-015001/`](benchmark_results/20261017-015001/report.md): `report.md` (the benchmark's report), `metrics.json`, `trials.csv` (one row per trial), `pi_metrics.csv` (Pi resource samples) and `pi_specs.json`.
+
+| Item | Value |
+|---|---|
+| Wake word detected (trials with "Alexa") | 82.7 % (167 / 202) |
+| Intent accuracy (19 intents + reject) | 73.3 % (148 / 202) |
+| Command accuracy (93 commands + reject) | 72.8 % |
+| False-accept rate (out-of-scope fired) | 12.5 % (2 / 16) |
+| False-wake rate (no wake word, fired) | 31.2 % (5 / 16) |
+| Slot exact (intent correct) | 98.8 % (79 / 80) |
+| Latency p50 / p95 (command end to log line) | 0.62 / 1.19 s |
+| Inference time mean / p95 | 12.3 / 16.0 ms |
+| Real-time factor mean / p95 | 0.007 / 0.012 |
+
+Settings of this run: wake word "Alexa" (one recorded take), pause 1.0 s, 10 to 15 s between trials, shuffle seed 24992, Pi mic `plughw:3,0` (signal-to-noise 23.1 dB). The engine was at commit `3bf3a2c`, which also switched the wake word off for 10 s after each wake in benchmark mode; that hold was removed afterwards (commit `af9be30`). The README (section 3) has the breakdown by real and synthetic voices and the Pi's CPU, RAM and temperature.
+
+To reproduce, follow [How to run](#how-to-run) with the same answers; `python benchmark.py` writes the same files to `runs/<timestamp>/` on the laptop. Enter seed `24992` when asked (or pass `--seed 24992`) to play the same clips in the same order.
+
 ## Benchmark mode behaviour
 
 With `VCM_BENCHMARK=1` (set by `run_benchmark.sh`) the engine differs from normal use (`run.sh`) in one way:

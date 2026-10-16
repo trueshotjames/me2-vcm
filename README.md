@@ -116,6 +116,12 @@ me2-vcm/
 ├── .gitattributes                 Keeps CRLF line endings for .bat files and LF for .sh files
 ├── requirements.txt               Python packages for .venv
 ├── CHANGE.md                      Log of fixes and the steps they need from you
+├── BENCHMARK_README.md            How to run the course benchmark against the Pi, and what the engine logs
+├── run_benchmark.sh               Pi: starts the wake word engine in benchmark mode (VCM_BENCHMARK=1)
+├── wake_check.py                  Pi: prints the live wake word score, to check the mic and speaker setup
+├── benchmark_results/
+│   └── 20261017-015001/           Live Pi benchmark run (section 3): report.md, metrics.json,
+│                                  per-trial trials.csv, Pi resource samples, Pi specs
 ├── run_train_pipeline.py         One command for the whole training pipeline: downloads the code
 │                                  and data, preprocesses, trains, exports and copies the model to
 │                                  models/ (section 6)
@@ -148,13 +154,51 @@ me2-vcm/
 | Model | Size on the Pi | Holdout set | Holdout result | Test / validation result |
 |---|---|---|---|---|
 | **Voice command model** (causal DS-CNN + CTC) | 0.95 M params, 3.8 MB fp32 ONNX | AI231 ME2 Voice Commands, `holdout` split [[1]](#ref1): 202 clips, 93 command variations plus 16 out-of-scope clips, speakers never used in training | **Intent accuracy 95.5 %** (193 / 202); out-of-scope rejected 11 / 16 | Intent accuracy 96.7 % (4,297 / 4,443, ME2 `test` split); token F1 0.894, precision 0.918, recall 0.880, false alarm rate 0.0008 (integrated test split, 15,713 clips) |
-| **Wake word model** (DS-CNN clip classifier) | 33.6 k params, 57 KB int8 ONNX | *TODO* | *TODO* | Validation F1 0.984, precision 0.983, recall 0.985, accuracy 0.987, false alarm rate 0.012 (3,449 clips, best epoch 130) |
+| **Wake word model** (DS-CNN clip classifier) | 33.6 k params, 57 KB int8 ONNX | Live Pi benchmark (below): one recorded "Alexa" take before each of the 202 ME2 `holdout` clips, plus 16 holdout commands without it | Wake detected on 167 / 202 trials (82.7 %); fired on 5 / 16 trials without the wake word | Validation F1 0.984, precision 0.983, recall 0.985, accuracy 0.987, false alarm rate 0.012 (3,449 clips, best epoch 130) |
 
 How these were measured:
 
 - **VCM intent accuracy** is the share of clips whose decoded text maps to the correct action and value, with the same beam search and grammar the Pi uses (offline decode of 5 s clips on the laptop). On the live streaming path, 1,144 of 1,200 test clips were correct, recording stopped a median 30 ms after speech ended, and decoding took 2.1 ms per 80 ms step.
 - **VCM token metrics** come from `training_env/training_results.txt`, best epoch 309, on the speaker-disjoint integrated test split used for early stopping.
-- **Wake word metrics** are from the validation split during training, best epoch 130 (`training_env_wake/logs/wake_training_results.txt` on Hugging Face). The holdout evaluation is still to be added.
+- **Wake word metrics** are from the validation split during training, best epoch 130 (`training_env_wake/logs/wake_training_results.txt` on Hugging Face). The holdout result is from the live Pi benchmark below.
+
+### Validation on the Raspberry Pi 4 (live benchmark)
+
+Measured end to end on the Pi with the course benchmark [airimonda/vcm-benchmark](https://github.com/airimonda/vcm-benchmark) on 17 October 2026 (run `20261017-015001`). A laptop played each trial through its speaker; the Pi heard it through its microphone, ran the wake word model and the VCM, and logged the result. Full report and per-trial data: [`benchmark_results/20261017-015001/`](benchmark_results/20261017-015001/report.md). How to run it: [`BENCHMARK_README.md`](BENCHMARK_README.md).
+
+| Item | Value |
+|---|---|
+| Keyword (wake word) / intent accuracy | 82.7 % (167 / 202) / 73.3 % (148 / 202, 19 intents + reject) |
+| False-accept rate | 12.5 % (2 / 16 out-of-scope clips fired a command) |
+| Latency p95 / RTF | 1,193 ms (command end to result line) / 0.007 mean, 0.012 p95 |
+| Runtime | ONNX Runtime, CPU execution provider, default threads (4 cores); wake word and VCM sessions run one after the other |
+
+| Metric | Overall | Real voices | Synthetic voices |
+|---|---|---|---|
+| Trials with the wake word | 202 | 96 | 106 |
+| Intent accuracy (19 intents + reject) | 73.3 % | 65.6 % | 80.2 % |
+| Command accuracy (93 commands + reject) | 72.8 % | 64.6 % | 80.2 % |
+| False-reject rate (in-scope, no command or rejected) | 25.3 % | 33.7 % | 18.0 % |
+| Misfire rate (wrong command) | 2.7 % | 3.5 % | 2.0 % |
+| Slot exact (intent correct) | 98.8 % (79 / 80) | 96.8 % (30 / 31) | 100 % (49 / 49) |
+| False wake (no wake word, command fired) | 31.2 % (5 / 16) | 0 % (0 / 7) | 55.6 % (5 / 9) |
+| Latency p50 / p95 | 0.62 / 1.19 s | 0.56 / 1.01 s | 0.64 / 1.81 s |
+
+| Pi measurement | Mean / p95 / max |
+|---|---|
+| Inference time per command (VCM, Pi-reported) | 12.3 / 16.0 / 28.9 ms |
+| Engine CPU (100 % = one core) | 89.6 / 267.0 / 324.6 % |
+| Engine RAM (RSS) | 154.9 / 155.1 / 155.1 MB |
+| CPU temperature | 51.0 / 54.0 / 57.9 °C |
+| Throttling | none |
+
+Test conditions:
+
+- Raspberry Pi 4 Model B Rev 1.5 (4 cores, 1.8 GHz, 3.8 GB RAM), Debian 13, Python 3.13.5, M-930 USB microphone (`plughw:3,0`). Mic check: speech -19.9 dBFS, room noise -42.9 dBFS, signal-to-noise 23.1 dB.
+- Clips: the 202-clip ME2 `holdout` split [[1]](#ref1) (186 in-scope, 16 out-of-scope), plus 16 in-scope clips played without the wake word. Shuffle seed 24992.
+- Each trial: 0.3 s silence, "Alexa" (one take recorded by the author, used for every trial), 1.0 s pause, the command, then 10 to 15 s before the next trial. 218 trials in 60.7 min.
+- Engine: `./run_benchmark.sh` at commit `3bf3a2c`. In that version, benchmark mode also switched the wake word off for 10 s after each wake; this was removed afterwards (commit `af9be30`). Recording stops 0.6 s after the voice goes quiet, or 1.5 s after the beep if no voice is heard (5 s cap).
+- Of the 186 in-scope commands: 134 correct, 31 with no response (wake word not detected), 16 answered out-of-scope, 5 with a wrong intent.
 
 ---
 
@@ -444,7 +488,7 @@ All clips are already augmented, so they are published as they are and used with
 | SynTTS-Commands [[19]](#ref19), 15 other spoken commands such as "Hey Google" and "Volume up", same cloned voices (`speech-noise-dataset/VoxCeleb12_English/`) | 5,600 / 1,400 | 0 (not wake) | MIT |
 | Speech Noise Dataset [[22]](#ref22): noise and noisy speech (`speech-noise-dataset/noise_chopped/`) | 2,400 / 600 | 0 (not wake) | CC0 |
 | **Total** | **13,796 / 3,449** (4.54 h / 1.14 h) | | |
-| Holdout set | *TODO* | | |
+| Holdout set | Not a separate clip set: evaluated live on the Pi (section 3), one recorded "Alexa" take before each of the 202 ME2 `holdout` clips, plus 16 holdout commands without it | | |
 
 ### Preprocessing
 

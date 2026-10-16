@@ -1,0 +1,30 @@
+{
+  "type": "specs",
+  "t": 1792170428.5504766,
+  "hostname": "trueshot-pi",
+  "model": "Raspberry Pi 4 Model B Rev 1.5",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "kernel": "6.18.50+rpt-rpi-v8",
+  "arch": "aarch64",
+  "cpu_model": null,
+  "cores": 4,
+  "max_freq_mhz": 1800.0,
+  "ram_mb": 3789.8,
+  "swap_mb": 2048.0,
+  "disk_free_gb": 18.25,
+  "python": "3.13.5",
+  "packages": {
+    "onnxruntime": "1.21",
+    "tflite_runtime": null,
+    "tensorflow": null,
+    "torch": null,
+    "numpy": "2.2.4",
+    "sounddevice": "0.5.6",
+    "pyaudio": null,
+    "vosk": null
+  },
+  "audio_inputs": "**** List of CAPTURE Hardware Devices ****\ncard 3: M930 [M-930], device 0: USB Audio [USB Audio]\n  Subdevices: 1/1\n  Subdevice #0: subdevice #0",
+  "audio_outputs": "**** List of PLAYBACK Hardware Devices ****\ncard 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]\n  Subdevices: 1/1\n  Subdevice #0: subdevice #0\ncard 1: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]\n  Subdevices: 1/1\n  Subdevice #0: subdevice #0\ncard 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]\n  Subdevices: 8/8\n  Subdevice #0: subdevice #0\n  Subdevice #1: subdevice #1\n  Subdevice #2: subdevice #2\n  Subdevice #3: subdevice #3\n  Subdevice #4: subdevice #4\n  Subdevice #5: subdevice #5\n  Subdevice #6: subdevice #6\n  Subdevice #7: subdevice #7\ncard 3: M930 [M-930], device 0: USB Audio [USB Audio]\n  Subdevices: 1/1\n  Subdevice #0: subdevice #0",
+  "throttled": "0x0",
+  "uptime_s": 390.77
+}
