@@ -73,8 +73,17 @@ After "Alexa" ends, the Pi needs time before it records the command:
 
 That is roughly 0.45 s plus the model's run time and audio start-up on the Pi. A 1.0 s pause in the benchmark leaves room for this. If the warm-up commands in the benchmark's sound check lose their first word, raise the pause.
 
+## Benchmark mode behaviour
+
+With `VCM_BENCHMARK=1` (set by `run_benchmark.sh`) the engine differs from normal use (`run.sh`) in two ways:
+
+- **No UI, no music.** The engine sends nothing to `main_ui.py`: results are only written to the log. Commands like PLAY_MUSIC or NEXT never start playback, even if the UI is open.
+- **Wake word held between commands.** After each wake, the wake model is switched off for 10 s (`BENCH_WAKE_HOLD_SEC`), then listens again. The benchmark plays the next "Alexa" at least 12.4 s after the previous one ends (measured on run 20261016-230412: median 16 s, 10 to 15 s random gap after each command), so the model is only active when the next command can arrive.
+
+In both modes the command recording also stops on silence: 0.6 s after the voice goes quiet (`SILENCE_STOP_MS`), or 1.5 s after the beep if no voice is heard at all (`NO_VOICE_SEC`), whether or not the voice model recognised any words. The 5 s cap (`MAX_COMMAND_SEC`) stays as a backstop.
+
 ## Known limitations
 
-1. **Turn music off.** Stop music on the Pi before the test (stop `main_ui.py`, or don't start playback). Otherwise the mic picks it up and causes false wakes or garbled commands.
+1. **Music started before the test.** Benchmark mode never starts music, but music already playing from earlier use keeps playing. Stop it (or `main_ui.py`) before the test, or the mic picks it up.
 2. **`infer_ms` covers the final decode only.** While the command is spoken, the VCM also runs every 80 ms to decide when the command has ended (`DECODE_TICK_MS`). That work shows up in the benchmark's CPU numbers, not in `infer_ms`.
 3. **Single-threaded inference.** The ONNX sessions run one after the other on the Pi's CPU, so `infer_ms` is real Pi latency.
