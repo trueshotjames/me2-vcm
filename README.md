@@ -200,6 +200,25 @@ Test conditions:
 - Engine: `./run_benchmark.sh`. Recording stops 0.6 s after the voice goes quiet, or 1.5 s after the beep if no voice is heard (5 s cap).
 - Of the 186 in-scope commands: 134 correct, 31 with no response (wake word not detected), 16 answered out-of-scope, 5 with a wrong intent.
 
+### Comparison with published baselines of comparable size
+
+Reported results are taken from the cited papers, not re-run here. The test sets differ, so the numbers are not directly comparable.
+
+| Model | Size | Test data | Result |
+|---|---|---|---|
+| **Voice command model (ours)**, causal DS-CNN + CTC | 0.95 M params, 3.8 MB | ME2 `holdout` [[1]](#ref1), 202 clips, 19 intents + reject, unseen speakers | Intent accuracy 95.5 % offline; 73.3 % live on the Pi 4 |
+| Mhiri et al. [[26]](#ref26), ASR-free end-to-end CNN | 1.3 MB | Fluent Speech Commands [[5]](#ref5) test set, 31 intents, clean | Intent accuracy 97.8 % (error 2.18 %) |
+| Saade et al. [[6]](#ref6), Snips ASR + NLU on a Raspberry Pi 3 | 15.1 MB; acoustic model 2.6 M params | SmartLights, 6 intents, 5-fold cross-validation | Intent F1 91.7 % close field, 83.6 % far field |
+| **Wake word model (ours)**, DS-CNN on raw audio | 33.6 k params, 57 KB int8 | SynTTS-Commands "Alexa" vs. other commands and noise [[19]](#ref19), 3,449 validation clips, 2 classes | Accuracy 98.7 %, F1 0.984; 82.7 % detected live on the Pi 4 |
+| Gan & Li [[19]](#ref19), DS-CNN baseline | 30.1 k params | SynTTS-Commands-Media, English, 23 command classes | Accuracy 99.46 % |
+| Zhang et al. [[25]](#ref25), DS-CNN small | 38.6 KB (8-bit) | Speech Commands [[3]](#ref3), 12 classes | Accuracy 94.4 % |
+
+Dataset differences:
+
+- Our VCM is scored on real and synthetic Filipino-accented speakers it never heard in training, with spoken numbers as slot values. Fluent Speech Commands and SmartLights have different speakers and command sets.
+- Our wake word model and the Gan & Li baseline use clips from the same source, but ours is a binary task ("Alexa" or not) and Gan & Li classify 23 commands. Speech Commands uses different words and speakers.
+- None of the baselines report a live, over-the-air test like the Pi benchmark above.
+
 ---
 
 ## 4. Running it on a Raspberry Pi 4
@@ -568,6 +587,7 @@ On the Pi, the engine downsamples the 48 kHz microphone stream to 16 kHz and sco
 23. <a id="ref23"></a>Graves, A., Fernández, S., Gomez, F., & Schmidhuber, J. (2006). Connectionist temporal classification. *ICML 2006*. DOI: [10.1145/1143844.1143891](https://doi.org/10.1145/1143844.1143891)
 24. <a id="ref24"></a>Park, D. S., et al. (2019). SpecAugment: A simple data augmentation method for automatic speech recognition. *Interspeech 2019*. DOI: [10.21437/Interspeech.2019-2680](https://doi.org/10.21437/Interspeech.2019-2680)
 25. <a id="ref25"></a>Zhang, Y., Suda, N., Lai, L., & Chandra, V. (2017). Hello Edge: Keyword spotting on microcontrollers. arXiv:1711.07128. DOI: [10.48550/arXiv.1711.07128](https://doi.org/10.48550/arXiv.1711.07128)
+26. <a id="ref26"></a>Mhiri, M., Myer, S., & Tomar, V. S. (2020). A low latency ASR-free end to end spoken language understanding system. *Interspeech 2020*, 1947–1951. DOI: [10.21437/Interspeech.2020-1449](https://doi.org/10.21437/Interspeech.2020-1449)
 
 ---
 
