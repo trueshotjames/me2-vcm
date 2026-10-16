@@ -315,6 +315,10 @@ class WakeWordEngine:
         self.buffer_size = int(self.buffer_duration * self.native_sr)
         self.buffer = np.zeros(self.buffer_size, dtype=np.float32)
         self.buffer_index = 0
+        # Samples written since the buffer was last cleared. The wake model fires on silence
+        # followed by the start of any speech (score ~0.99), so it only runs once the whole
+        # 1.5 s window holds real audio.
+        self.filled = 0
 
         # While a command is recorded, the same stream also feeds this queue
         self.capturing = False
@@ -344,6 +348,7 @@ class WakeWordEngine:
             self.buffer[0:overflow] = indata[frames - overflow:, 0]
 
         self.buffer_index = (self.buffer_index + frames) % self.buffer_size
+        self.filled += frames
 
     def record_command(self):
         """Records from the open mic stream and decodes while the person speaks.
@@ -384,6 +389,7 @@ class WakeWordEngine:
 
                 # Extract the most recent 1.5 seconds from the rolling buffer
                 clip_size = int(self.window_duration * self.native_sr)
+                window_full = self.filled >= clip_size
 
                 if self.buffer_index >= clip_size:
                     clip = self.buffer[self.buffer_index - clip_size : self.buffer_index]
@@ -405,7 +411,7 @@ class WakeWordEngine:
                 # 3. Transform the raw numerical output into your desired text labels
                 # (Assuming a standard binary classification output format; adjust indexing if needed)
                 score = raw_output[0][0][0]
-                prediction = "wake" if score > 0.5 else "nonwake"
+                prediction = "wake" if score > 0.5 and window_full else "nonwake"
 
                 # Check if the manual record button in the UI was clicked
                 manual_trigger = False
@@ -424,6 +430,7 @@ class WakeWordEngine:
                         self.capturing = False
                         self.buffer.fill(0) # Clear stale audio to prevent instant re-triggering
                         self.buffer_index = 0
+                        self.filled = 0
 
     def handle_command(self):
         """Beep, record until the command is finished, decode, and send the result to the UI."""
