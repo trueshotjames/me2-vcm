@@ -1,4 +1,4 @@
-# VCM benchmark - 202521354 - 20261017-015001
+# VCM benchmark - 20261017-015001
 
 Wake word: **Alexa** - trials: 202 with the wake word + 16 without - shuffle seed: 24992 - connection: ssh - holdout: huggingface
 

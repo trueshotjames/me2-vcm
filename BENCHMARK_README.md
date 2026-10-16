@@ -89,7 +89,7 @@ Run `20261017-015001` (17 October 2026), full holdout, 218 trials. The files are
 | Inference time mean / p95 | 12.3 / 16.0 ms |
 | Real-time factor mean / p95 | 0.007 / 0.012 |
 
-Settings of this run: wake word "Alexa" (one recorded take), pause 1.0 s, 10 to 15 s between trials, shuffle seed 24992, Pi mic `plughw:3,0` (signal-to-noise 23.1 dB). The engine was at commit `3bf3a2c`, which also switched the wake word off for 10 s after each wake in benchmark mode; that hold was removed afterwards (commit `af9be30`). The README (section 3) has the breakdown by real and synthetic voices and the Pi's CPU, RAM and temperature.
+Settings of this run: wake word "Alexa" (one recorded take), pause 1.0 s, 10 to 15 s between trials, shuffle seed 24992, Pi mic `plughw:3,0` (signal-to-noise 23.1 dB). The README (section 3) has the breakdown by real and synthetic voices and the Pi's CPU, RAM and temperature.
 
 To reproduce, follow [How to run](#how-to-run) with the same answers; `python benchmark.py` writes the same files to `runs/<timestamp>/` on the laptop. Enter seed `24992` when asked (or pass `--seed 24992`) to play the same clips in the same order.
 

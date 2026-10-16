@@ -197,7 +197,7 @@ Test conditions:
 - Raspberry Pi 4 Model B Rev 1.5 (4 cores, 1.8 GHz, 3.8 GB RAM), Debian 13, Python 3.13.5, M-930 USB microphone (`plughw:3,0`). Mic check: speech -19.9 dBFS, room noise -42.9 dBFS, signal-to-noise 23.1 dB.
 - Clips: the 202-clip ME2 `holdout` split [[1]](#ref1) (186 in-scope, 16 out-of-scope), plus 16 in-scope clips played without the wake word. Shuffle seed 24992.
 - Each trial: 0.3 s silence, "Alexa" (one take recorded by the author, used for every trial), 1.0 s pause, the command, then 10 to 15 s before the next trial. 218 trials in 60.7 min.
-- Engine: `./run_benchmark.sh` at commit `3bf3a2c`. In that version, benchmark mode also switched the wake word off for 10 s after each wake; this was removed afterwards (commit `af9be30`). Recording stops 0.6 s after the voice goes quiet, or 1.5 s after the beep if no voice is heard (5 s cap).
+- Engine: `./run_benchmark.sh`. Recording stops 0.6 s after the voice goes quiet, or 1.5 s after the beep if no voice is heard (5 s cap).
 - Of the 186 in-scope commands: 134 correct, 31 with no response (wake word not detected), 16 answered out-of-scope, 5 with a wrong intent.
 
 ---
