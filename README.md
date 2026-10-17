@@ -182,7 +182,8 @@ Measured end to end on the Pi with the course benchmark [airimonda/vcm-benchmark
 
 | Item | Value |
 |---|---|
-| Keyword (wake word) / intent accuracy | 82.7 % (167 / 202) / 73.3 % (148 / 202, 19 intents + reject) |
+| Keyword (wake word) / intent accuracy | 82.7 % (167 / 202) / 73.3 % (148 / 202, 19 intents + reject), end to end, so missed wake words count against it |
+| VCM intent accuracy when the wake word fired | 86.2 % (144 / 167) |
 | False-accept rate | 12.5 % (2 / 16 out-of-scope clips fired a command) |
 | Latency p95 / RTF | 1,193 ms (command end to result line) / 0.007 mean, 0.012 p95 |
 | Runtime | ONNX Runtime, CPU execution provider, default threads (4 cores); wake word and VCM sessions run one after the other |
@@ -220,7 +221,7 @@ Reported results are taken from the cited papers, not re-run here. The test sets
 
 | Model | Size | Test data | Result |
 |---|---|---|---|
-| **Voice command model (ours)**, causal DS-CNN + CTC | 0.95 M params, 3.8 MB | ME2 `holdout` [[1]](#ref1), 202 clips, 19 intents + reject, unseen speakers | Intent accuracy 95.5 % offline (clips fed directly to the VCM); 73.3 % live on the Pi 4 (clips played aloud, wake word + VCM) |
+| **Voice command model (ours)**, causal DS-CNN + CTC | 0.95 M params, 3.8 MB | ME2 `holdout` [[1]](#ref1), 202 clips, 19 intents + reject, unseen speakers | Intent accuracy 95.5 % offline (clips fed directly to the VCM); 86.2 % live on the Pi 4 (144 / 167 clips played aloud, counting only trials where the wake word fired, so wake word misses are excluded; the 73.3 % in the Pi benchmark above is wake word + VCM together) |
 | Mhiri et al. [[26]](#ref26), ASR-free end-to-end CNN | 1.3 MB | Fluent Speech Commands [[5]](#ref5) test set, 31 intents, clean | Intent accuracy 97.8 % (error 2.18 %) |
 | Saade et al. [[6]](#ref6), Snips ASR + NLU on a Raspberry Pi 3 | 15.1 MB; acoustic model 2.6 M params | SmartLights, 6 intents, 5-fold cross-validation | Intent F1 91.7 % close field, 83.6 % far field |
 | **Wake word model (ours)**, DS-CNN on raw audio | 33.6 k params, 57 KB int8 | SynTTS-Commands "Alexa" vs. other commands and noise [[19]](#ref19), 3,449 validation clips, 2 classes | Accuracy 98.7 %, F1 0.984 (clips fed directly to the model); 82.7 % detected live on the Pi 4 (clips played aloud) |
