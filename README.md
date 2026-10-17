@@ -18,9 +18,26 @@ The three slides below summarise the project: the voice command model, the wake 
 
 ---
 
+## Quick start: open the voice UI
+
+On a Raspberry Pi 4 (Raspberry Pi OS) with a USB microphone and a speaker:
+
+```bash
+sudo apt update && sudo apt install -y git python3-venv vlc libportaudio2 libsndfile1
+git clone https://github.com/trueshotjames/me2-vcm.git
+cd me2-vcm
+./run.sh
+```
+
+`run.sh` creates `.venv` and installs the Python packages on the first run, starts the server and the wake word engine, and opens the dashboard at `http://127.0.0.1:5000/?lite=1`. Wait for the **Listening** badge, say **"Alexa"**, wait for the beep, then say a command such as *"turn the lights blue"*. Press `Ctrl+C` in the terminal to stop. On Windows, double-click `run.bat` instead.
+
+Full setup, microphone checks and troubleshooting: [section 4](#4-running-it-on-a-raspberry-pi-4).
+
+---
+
 ## Contents
 
-0. [Summary for the reviewer](#summary-for-the-reviewer)
+0. [Summary for the reviewer](#summary-for-the-reviewer) · [Quick start: open the voice UI](#quick-start-open-the-voice-ui)
 1. [What the project does and how the webpage works](#1-what-the-project-does-and-how-the-webpage-works)
 2. [Project structure](#2-project-structure)
 3. [Model performance](#3-model-performance)
