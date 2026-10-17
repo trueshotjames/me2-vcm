@@ -354,7 +354,7 @@ One command sets up the data, preprocesses, trains, exports and copies the new m
   pip install -r training_env_wake/requirements.txt
   ```
 
-- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database (see below). The wake word model needs nothing outside the Hugging Face repository.
+- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database. Its terms do not allow redistribution, so it is not in the Hugging Face repository and each user downloads it with their own account (see below). The wake word model needs nothing outside the Hugging Face repository.
 
 ### Run it
 
