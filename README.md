@@ -354,7 +354,7 @@ One command sets up the data, preprocesses, trains, exports and copies the new m
   pip install -r training_env_wake/requirements.txt
   ```
 
-- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database. Its terms do not allow redistribution, so it is not in the Hugging Face repository and each user downloads it with their own account (see below). The wake word model needs nothing outside the Hugging Face repository.
+- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database. Its terms do not allow redistribution ([quoted below](#the-philippine-languages-database)), so it is not in the Hugging Face repository and each user downloads it with their own account. The wake word model needs nothing outside the Hugging Face repository.
 
 ### Run it
 
@@ -405,7 +405,11 @@ With `--model all`, stage names shared by both models (`verify`, `preprocess`, `
 
 ### The Philippine Languages Database
 
-Its terms do not allow redistribution, so each user downloads it with their own account:
+Its terms do not allow redistribution, so each user downloads it with their own account. Under "Restrictions/Special Constraints", the [dataset page](https://mozilladatacollective.com/datasets/cmmxhw46c00tqnw07xyr94zjk) says:
+
+> "The dataset may be used solely for research purposes." "Redistribution, sharing with third parties, or use of the dataset for commercial purposes is strictly prohibited" without prior written consent.
+
+To download it:
 
 1. Log in at the [dataset page](https://mozilladatacollective.com/datasets/cmmxhw46c00tqnw07xyr94zjk) and accept the terms.
 2. Create an API key in your profile settings.
