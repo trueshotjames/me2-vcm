@@ -6,8 +6,21 @@ An offline voice assistant for a **Raspberry Pi 4 (4 GB RAM)**. You say **"Alexa
 
 ---
 
+## Summary for the reviewer
+
+The three slides below summarise the project: the voice command model, the wake word model, and where each submission item lives. The editable deck is [`docs/slides/ME2_slides.pptx`](docs/slides/ME2_slides.pptx); the details behind every number are in the sections that follow.
+
+![Slide 1: voice command model (VCM)](docs/slides/slide-1-vcm.png)
+
+![Slide 2: wake word model](docs/slides/slide-2-wake-word.png)
+
+![Slide 3: submission details and reviewer checklist](docs/slides/slide-3-submission.png)
+
+---
+
 ## Contents
 
+0. [Summary for the reviewer](#summary-for-the-reviewer)
 1. [What the project does and how the webpage works](#1-what-the-project-does-and-how-the-webpage-works)
 2. [Project structure](#2-project-structure)
 3. [Model performance](#3-model-performance)
@@ -142,7 +155,8 @@ me2-vcm/
 │   ├── beep.mp3                   Played when the wake word is heard
 │   └── call_ringtone.mp3          Played by the call popup
 ├── playlist/                      Demo songs (.mp3) for the music commands; add or swap your own
-└── screenshots/                   Images used in this README
+├── screenshots/                   Images used in this README
+└── docs/slides/                   Summary slides shown at the top of this README (PNG + editable .pptx)
 ```
 
 `alarms.xlsx` and `reminders.xlsx` are created next to `main_ui.py` on first start and are not part of the repository.
