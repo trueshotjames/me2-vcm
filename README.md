@@ -167,12 +167,12 @@ me2-vcm/
 
 | Model | Size on the Pi | Holdout set | Holdout result | Test / validation result |
 |---|---|---|---|---|
-| **Voice command model** (causal DS-CNN + CTC) | 0.95 M params, 3.8 MB fp32 ONNX | AI231 ME2 Voice Commands, `holdout` split [[1]](#ref1): 202 clips, 93 command variations plus 16 out-of-scope clips, speakers never used in training | **Intent accuracy 95.5 %** (193 / 202); out-of-scope rejected 11 / 16 | Intent accuracy 96.7 % (4,297 / 4,443, ME2 `test` split); token F1 0.894, precision 0.918, recall 0.880, false alarm rate 0.0008 (integrated test split, 15,713 clips) |
+| **Voice command model** (causal DS-CNN + CTC) | 0.95 M params, 3.8 MB fp32 ONNX | AI231 ME2 Voice Commands, `holdout` split [[1]](#ref1): 202 clips, 93 command variations plus 16 out-of-scope clips, speakers never used in training | **Intent accuracy 95.5 %** (193 / 202), clips fed directly to the VCM; out-of-scope rejected 11 / 16 | Intent accuracy 96.7 % (4,297 / 4,443, ME2 `test` split); token F1 0.894, precision 0.918, recall 0.880, false alarm rate 0.0008 (integrated test split, 15,713 clips) |
 | **Wake word model** (DS-CNN clip classifier) | 33.6 k params, 57 KB int8 ONNX | Live Pi benchmark (below): one recorded "Alexa" take before each of the 202 ME2 `holdout` clips, plus 16 holdout commands without it | Wake detected on 167 / 202 trials (82.7 %); fired on 5 / 16 trials without the wake word | Validation F1 0.984, precision 0.983, recall 0.985, accuracy 0.987, false alarm rate 0.012 (3,449 clips, best epoch 130) |
 
 How these were measured:
 
-- **VCM intent accuracy** is the share of clips whose decoded text maps to the correct action and value, with the same beam search and grammar the Pi uses (offline decode of 5 s clips on the laptop). On the live streaming path, 1,144 of 1,200 test clips were correct, recording stopped a median 30 ms after speech ended, and decoding took 2.1 ms per 80 ms step.
+- **VCM intent accuracy** is the share of clips whose decoded text maps to the correct action and value, with the same beam search and grammar the Pi uses (offline: the holdout clip files fed directly to the VCM on the laptop, no microphone or wake word). On the live streaming path, 1,144 of 1,200 test clips were correct, recording stopped a median 30 ms after speech ended, and decoding took 2.1 ms per 80 ms step.
 - **VCM token metrics** come from `training_env/training_results.txt`, best epoch 309, on the speaker-disjoint integrated test split used for early stopping.
 - **Wake word metrics** are from the validation split during training, best epoch 130 (`training_env_wake/logs/wake_training_results.txt` on Hugging Face). The holdout result is from the live Pi benchmark below.
 
@@ -182,7 +182,8 @@ Measured end to end on the Pi with the course benchmark [airimonda/vcm-benchmark
 
 | Item | Value |
 |---|---|
-| Keyword (wake word) / intent accuracy | 82.7 % (167 / 202) / 73.3 % (148 / 202, 19 intents + reject) |
+| Keyword (wake word) / intent accuracy | 82.7 % (167 / 202) / 73.3 % (148 / 202, 19 intents + reject), end to end, so missed wake words count against it |
+| VCM intent accuracy when the wake word fired | 86.2 % (144 / 167) |
 | False-accept rate | 12.5 % (2 / 16 out-of-scope clips fired a command) |
 | Latency p95 / RTF | 1,193 ms (command end to result line) / 0.007 mean, 0.012 p95 |
 | Runtime | ONNX Runtime, CPU execution provider, default threads (4 cores); wake word and VCM sessions run one after the other |
@@ -220,10 +221,10 @@ Reported results are taken from the cited papers, not re-run here. The test sets
 
 | Model | Size | Test data | Result |
 |---|---|---|---|
-| **Voice command model (ours)**, causal DS-CNN + CTC | 0.95 M params, 3.8 MB | ME2 `holdout` [[1]](#ref1), 202 clips, 19 intents + reject, unseen speakers | Intent accuracy 95.5 % offline; 73.3 % live on the Pi 4 |
+| **Voice command model (ours)**, causal DS-CNN + CTC | 0.95 M params, 3.8 MB | ME2 `holdout` [[1]](#ref1), 202 clips, 19 intents + reject, unseen speakers | Intent accuracy 95.5 % offline (clips fed directly to the VCM); 86.2 % live on the Pi 4 (144 / 167 clips played aloud, counting only trials where the wake word fired, so wake word misses are excluded; the 73.3 % in the Pi benchmark above is wake word + VCM together) |
 | Mhiri et al. [[26]](#ref26), ASR-free end-to-end CNN | 1.3 MB | Fluent Speech Commands [[5]](#ref5) test set, 31 intents, clean | Intent accuracy 97.8 % (error 2.18 %) |
 | Saade et al. [[6]](#ref6), Snips ASR + NLU on a Raspberry Pi 3 | 15.1 MB; acoustic model 2.6 M params | SmartLights, 6 intents, 5-fold cross-validation | Intent F1 91.7 % close field, 83.6 % far field |
-| **Wake word model (ours)**, DS-CNN on raw audio | 33.6 k params, 57 KB int8 | SynTTS-Commands "Alexa" vs. other commands and noise [[19]](#ref19), 3,449 validation clips, 2 classes | Accuracy 98.7 %, F1 0.984; 82.7 % detected live on the Pi 4 |
+| **Wake word model (ours)**, DS-CNN on raw audio | 33.6 k params, 57 KB int8 | SynTTS-Commands "Alexa" vs. other commands and noise [[19]](#ref19), 3,449 validation clips, 2 classes | Accuracy 98.7 %, F1 0.984 (clips fed directly to the model); 82.7 % detected live on the Pi 4 (clips played aloud) |
 | Gan & Li [[19]](#ref19), DS-CNN baseline | 30.1 k params | SynTTS-Commands-Media, English, 23 command classes | Accuracy 99.46 % |
 | Zhang et al. [[25]](#ref25), DS-CNN small | 38.6 KB (8-bit) | Speech Commands [[3]](#ref3), 12 classes | Accuracy 94.4 % |
 
