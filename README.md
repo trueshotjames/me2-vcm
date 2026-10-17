@@ -339,6 +339,18 @@ On current Raspberry Pi OS the browser command is `chromium` (older releases cal
 
 ## 6. Reproducing the training
 
+### On the course GPU cluster (quickest)
+
+This is the easiest way to reproduce both models. Everything, including the Philippine Languages Database, is already in place on the cluster, so the download stages are skipped and the cluster's missing internet access does not matter:
+
+```bash
+cd "/home/king.james.villasin/sandbox/Machine Exercise 2"
+python run_train_pipeline.py --model vcm --yes
+python run_train_pipeline.py --model wake --yes     # inside tmux; the wake clips are already in training_env_wake/dataset/
+```
+
+### Anywhere else
+
 One command sets up the data, preprocesses, trains, exports and copies the new model into `models/`. The training code, the frozen splits, the Common Voice clips and all wake word clips are published on Hugging Face: [trueshotjames/ai231-king-me2](https://huggingface.co/datasets/trueshotjames/ai231-king-me2), tag `v1.0`, DOI [10.57967/hf/10994](https://doi.org/10.57967/hf/10994). Tag `v0.1-vcm` is the earlier VCM-only version.
 
 ### What you need
@@ -354,7 +366,7 @@ One command sets up the data, preprocesses, trains, exports and copies the new m
   pip install -r training_env_wake/requirements.txt
   ```
 
-- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database (see below). The wake word model needs nothing outside the Hugging Face repository.
+- VCM only: a free [Mozilla Data Collective](https://mozilladatacollective.com) account for the Philippine Languages Database. Its terms do not allow redistribution ([quoted below](#the-philippine-languages-database)), so it is not in the Hugging Face repository and each user downloads it with their own account. The wake word model needs nothing outside the Hugging Face repository.
 
 ### Run it
 
@@ -405,23 +417,17 @@ With `--model all`, stage names shared by both models (`verify`, `preprocess`, `
 
 ### The Philippine Languages Database
 
-Its terms do not allow redistribution, so each user downloads it with their own account:
+Its terms do not allow redistribution, so each user downloads it with their own account. Under "Restrictions/Special Constraints", the [dataset page](https://mozilladatacollective.com/datasets/cmmxhw46c00tqnw07xyr94zjk) says:
+
+> The dataset is open source and provided “as is,” without warranties or guarantees of any kind, and without any obligation to provide technical support. The dataset may be used solely for research purposes. Redistribution, sharing with third parties, or use of the dataset for commercial purposes is strictly prohibited without prior written consent.
+
+To download it:
 
 1. Log in at the [dataset page](https://mozilladatacollective.com/datasets/cmmxhw46c00tqnw07xyr94zjk) and accept the terms.
 2. Create an API key in your profile settings.
 3. Paste the key when `run_train_pipeline.py` asks for it, or set it first with `export MDC_API_KEY=...`. The key is not stored.
 
 The archive is 45.6 GB, but the script streams it and keeps only the `ENG` folder. It stops once that folder has been read.
-
-### On the course GPU cluster
-
-Everything, including the Philippine Languages Database, is already in place on the cluster, so the download stages are skipped and the cluster's missing internet access does not matter:
-
-```bash
-cd "/home/king.james.villasin/sandbox/Machine Exercise 2"
-python run_train_pipeline.py --model vcm --yes
-python run_train_pipeline.py --model wake --yes     # inside tmux; the wake clips are already in training_env_wake/dataset/
-```
 
 ---
 
